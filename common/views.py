@@ -1,7 +1,7 @@
 import json
 import secrets
 from multiprocessing import context
-from re import template
+# from re import template
 
 import requests
 from django.contrib.auth.base_user import BaseUserManager
@@ -899,7 +899,8 @@ class GoogleLoginView(APIView):
             user.email = data['email']
             user.profile_pic = data['picture']
             # provider random default password
-            user.password = make_password(BaseUserManager().make_random_password())
+            # user.password = make_password(BaseUserManager().make_random_password())
+            user.set_unusable_password()
             user.email = data['email']
             user.save()
         token = RefreshToken.for_user(user)  # generate token without username & password
