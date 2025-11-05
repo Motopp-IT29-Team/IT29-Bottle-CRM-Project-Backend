@@ -6,6 +6,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common.models import (
     Address,
@@ -132,12 +133,13 @@ class BillingAddressSerializer(serializers.ModelSerializer):
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
-
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
     class Meta:
         model = User
         fields = (
             "email",
             "profile_pic",
+            "password",
         )
 
     def __init__(self, *args, **kwargs):
@@ -155,6 +157,22 @@ class CreateUserSerializer(serializers.ModelSerializer):
         if not Profile.objects.filter(user__email=email.lower(), org=self.org).exists():
             return email
         raise serializers.ValidationError("Given Email id already exists")
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        if not password:
+            raise serializers.ValidationError({"password": "This field is required."})
+        user = User.objects.create_user(password=password, **validated_data)
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for k, v in validated_data.items():
+            setattr(instance, k, v)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
 
 
 class CreateProfileSerializer(serializers.ModelSerializer):
@@ -360,6 +378,7 @@ class UserCreateSwaggerSerializer(serializers.Serializer):
     ROLE_CHOICES = ["ADMIN", "USER"]
 
     email = serializers.CharField(max_length=1000,required=True)
+    password = serializers.CharField(min_length=8, required=True)
     role = serializers.ChoiceField(choices = ROLE_CHOICES,required=True)
     phone = serializers.CharField(max_length=12)
     alternate_phone = serializers.CharField(max_length=12)
@@ -376,4 +395,19 @@ class UserUpdateStatusSwaggerSerializer(serializers.Serializer):
 
     status = serializers.ChoiceField(choices = STATUS_CHOICES,required=True)
 
+# backend/common/serializer.py
 
+
+
+class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    This allows login using email + password instead of username.
+    """
+    username_field = "email"
+
+    def validate(self, attrs):
+        # Ensure 'email' is mapped to 'username' for SimpleJWT
+        attrs = attrs.copy()
+        if "email" in attrs and "username" not in attrs:
+            attrs["username"] = attrs["email"]
+        return super().validate(attrs)
