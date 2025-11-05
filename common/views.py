@@ -63,6 +63,11 @@ from opportunity.models import Opportunity
 from opportunity.serializer import OpportunitySerializer
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
+from rest_framework import permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
+from common.serializer import EmailTokenObtainPairSerializer
 
 
 class GetTeamsAndUsersView(APIView):
@@ -910,3 +915,13 @@ class GoogleLoginView(APIView):
         response['refresh_token'] = str(token)
         response['user_id'] = user.id
         return Response(response)
+
+class EmailLoginView(TokenObtainPairView):
+    """
+    POST /api/auth/login/
+    Body: { "email": "user@example.com", "password": "MySecurePass123" }
+    Response: { "refresh": "...", "access": "..." }
+    """
+    serializer_class = EmailTokenObtainPairSerializer
+    authentication_classes = []  # public
+    permission_classes = []
