@@ -132,7 +132,6 @@ class BillingAddressSerializer(serializers.ModelSerializer):
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = User
         fields = (
@@ -146,15 +145,18 @@ class CreateUserSerializer(serializers.ModelSerializer):
         self.fields["email"].required = True
 
     def validate_email(self, email):
+        email = email.lower()
+
         if self.instance:
             if self.instance.email != email:
-                if not Profile.objects.filter(user__email=email, org=self.org).exists():
-                    return email
-                raise serializers.ValidationError("Email already exists")
+                if Profile.objects.filter(user__email=email, org=self.org).exists():
+                    raise serializers.ValidationError("Email already exists")
             return email
-        if not Profile.objects.filter(user__email=email.lower(), org=self.org).exists():
-            return email
-        raise serializers.ValidationError("Given Email id already exists")
+
+        if Profile.objects.filter(user__email=email, org=self.org).exists():
+            raise serializers.ValidationError("Given Email id already exists")
+
+        return email
 
 
 class CreateProfileSerializer(serializers.ModelSerializer):
@@ -173,7 +175,7 @@ class CreateProfileSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         self.fields["alternate_phone"].required = False
         self.fields["role"].required = True
-        self.fields["phone"].required = True
+        # self.fields["phone"].required = False
 
 
 class UserSerializer(serializers.ModelSerializer):
