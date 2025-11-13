@@ -68,7 +68,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from common.serializer import EmailTokenObtainPairSerializer
-
+from rest_framework.permissions import IsAuthenticated
+from common.permissions import IsOrgAdmin
 
 class GetTeamsAndUsersView(APIView):
 
@@ -90,7 +91,7 @@ class GetTeamsAndUsersView(APIView):
 
 class UsersListView(APIView, LimitOffsetPagination):
 
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,IsOrgAdmin )
     @extend_schema(parameters=swagger_params1.organization_params,request=UserCreateSwaggerSerializer)
     def post(self, request, format=None):
         print(request.profile.role, request.user.is_superuser)
@@ -208,7 +209,7 @@ class UsersListView(APIView, LimitOffsetPagination):
 
 
 class UserDetailView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,IsOrgAdmin)
 
     def get_object(self, pk):
         profile = get_object_or_404(Profile, pk=pk)
@@ -726,7 +727,7 @@ class DocumentDetailView(APIView):
 
 
 class UserStatusView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,IsOrgAdmin)
 
     @extend_schema(
         description="User Status View",parameters=swagger_params1.organization_params, request=UserUpdateStatusSwaggerSerializer
