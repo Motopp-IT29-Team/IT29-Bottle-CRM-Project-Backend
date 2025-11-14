@@ -28,7 +28,7 @@ USER ubuntu
 # install app
 RUN mkdir -p /home/ubuntu/"$APP_NAME"/"$APP_NAME"
 WORKDIR /home/ubuntu/"$APP_NAME"/"$APP_NAME"
-COPY . .
+COPY --chown=ubuntu:ubuntu . .
 RUN python3 -m venv ../venv
 RUN . ../venv/bin/activate
 RUN /home/ubuntu/"$APP_NAME"/venv/bin/pip install -U pip
@@ -38,4 +38,14 @@ RUN /home/ubuntu/"$APP_NAME"/venv/bin/pip install gunicorn
 # setup path
 ENV PATH="${PATH}:/home/ubuntu/$APP_NAME/$APP_NAME/scripts"
 
-USER ubuntu
+# Expose port
+EXPOSE 10000
+
+# Run migrations and start gunicorn
+CMD /home/ubuntu/"$APP_NAME"/venv/bin/python /home/ubuntu/"$APP_NAME"/"$APP_NAME"/manage.py migrate && \
+    /home/ubuntu/"$APP_NAME"/venv/bin/gunicorn crm.wsgi:application \
+    --bind 0.0.0.0:$PORT \
+    --workers 2 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
