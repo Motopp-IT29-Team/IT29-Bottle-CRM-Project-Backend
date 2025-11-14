@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: bottle-crm-api
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn crm.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: ENV_TYPE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bottle-crm-db
+          property: connectionString
+
+databases:
+  - name: bottle-crm-db
+    databaseName: bottle_crm
+    user: bottle_crm_user
