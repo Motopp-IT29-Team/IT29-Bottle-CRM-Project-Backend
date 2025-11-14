@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
+import dj_database_url
 
 # JWT_AUTH = {
 #     'JWT_PAYLOAD_GET_USERNAME_HANDLER':
@@ -122,14 +123,7 @@ WSGI_APPLICATION = "crm.wsgi.application"
 # https://docs.djangoproject.com/en/1.10/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ["DBNAME"],
-        "USER": os.environ["DBUSER"],
-        "PASSWORD": os.environ["DBPASSWORD"],
-        "HOST": os.environ["DBHOST"],
-        "PORT": os.environ["DBPORT"],
-    }
+    "default": dj_database_url.parse(os.environ["DATABASE_URL"])
 }
 
 
