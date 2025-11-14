@@ -4,7 +4,6 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: /home/ubuntu/bottle-crm/venv/bin/gunicorn crm.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: APP_NAME
         value: bottle-crm
