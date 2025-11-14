@@ -17,7 +17,7 @@ drf-rw-serializers
 django-crum
 Redis
 gunicorn
-dj-database-url
+dj-database-url==1.0.0
 # remove it
 django-phonenumber-field
 arrow
