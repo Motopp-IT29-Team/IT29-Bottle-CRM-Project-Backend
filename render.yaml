@@ -19,6 +19,16 @@ services:
         value: https://it-29-bottle-crm-project-frontend.vercel.app
       - key: DATABASE_URL
         value: postgresql://bottle_crm_user:w8tzSIbxiCk34jA2dox6gQqnayM6d1dw@dpg-d4bf467pm1nc73botv40-a/bottle_crm_ir00
+      - key: DBNAME
+        value: bottle_crm_ir00
+      - key: DBUSER
+        value: bottle_crm_user
+      - key: DBPASSWORD
+        value: w8tzSIbxiCk34jA2dox6gQqnayM6d1dw
+      - key: DBHOST
+        value: dpg-d4bf467pm1nc73botv40-a
+      - key: DBPORT
+        value: "5432"
       - key: CELERY_BROKER_URL
         value: redis://default:AUauAAIncDI1YzE1ZjVkYmI3YjA0ZGNiOWE3YzczOTliYjQyMTIyMXAyMTgwOTQ@noble-seal-18094.upstash.io:6379
       - key: CELERY_RESULT_BACKEND
@@ -43,16 +53,6 @@ services:
         value: https://it-29-bottle-crm-project-frontend.vercel.app,https://*.onrender.com
       - key: CORS_ORIGIN_ALLOW_ALL
         value: "True"
-      - key: DBNAME
-        value: bottle_crm_ir00
-      - key: DBUSER
-        value: bottle_crm_user
-      - key: DBPASSWORD
-        value: w8tzSIbxiCk34jA2dox6gQqnayM6d1dw
-      - key: DBHOST
-        value: dpg-d4bf467pm1nc73botv40-a
-      - key: DBPORT
-        value: "5432"
 
 databases:
   - name: bottle-crm-db
