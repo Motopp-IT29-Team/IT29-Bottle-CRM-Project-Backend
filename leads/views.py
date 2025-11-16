@@ -19,7 +19,18 @@ from common.serializer import (
 )
 from .forms import LeadListForm
 from .models import Company,Lead
-from common.utils import COUNTRIES, INDCHOICES, LEAD_SOURCE, LEAD_STATUS
+from common.utils import (
+    COUNTRIES,
+    INDCHOICES,
+    LEAD_SOURCE,
+    LEAD_STATUS,
+    SALUTATION_CHOICES,
+    DEPARTMENT_CHOICES,
+    LANGUAGE_CHOICES,
+    LEAD_RATING_CHOICES,
+    BUDGET_RANGE_CHOICES,
+    DECISION_TIMEFRAME_CHOICES,
+)
 from contacts.models import Contact
 from leads import swagger_params1
 from leads.forms import LeadListForm
@@ -347,6 +358,13 @@ class LeadDetailView(APIView):
         ).data
         context["source"] = LEAD_SOURCE
         context["status"] = LEAD_STATUS
+        context["salutation_choices"] = SALUTATION_CHOICES
+        context["department_choices"] = DEPARTMENT_CHOICES
+        context["language_choices"] = LANGUAGE_CHOICES
+        context["rating_choices"] = LEAD_RATING_CHOICES
+        context["budget_range_choices"] = BUDGET_RANGE_CHOICES
+        context["decision_timeframe_choices"] = DECISION_TIMEFRAME_CHOICES
+        context["industry_choices"] = INDCHOICES
         context["teams"] = TeamsSerializer(
             Teams.objects.filter(org=self.request.profile.org), many=True
         ).data

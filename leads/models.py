@@ -12,6 +12,15 @@ from common.utils import (
     INDCHOICES,
     LEAD_SOURCE,
     LEAD_STATUS,
+    SALUTATION_CHOICES,
+    DEPARTMENT_CHOICES,
+    LANGUAGE_CHOICES,
+    LEAD_RATING_CHOICES,
+    BUDGET_RANGE_CHOICES,
+    DECISION_TIMEFRAME_CHOICES,
+    NETHERLANDS_STATES,
+    BELGIUM_STATES,
+    GERMANY_STATES,
     return_complete_address,
 )
 from contacts.models import Contact
@@ -32,19 +41,46 @@ class Company(BaseModel):
         return f"{self.name}"
 
 class Lead(BaseModel):
+    # Salutation field (replaces title field for consistency)
+    salutation = models.CharField(
+        _("Salutation"), max_length=10, choices=SALUTATION_CHOICES, blank=True, null=True
+    )
     title = models.CharField(
-        pgettext_lazy("Treatment Pronouns for the customer", "Title"), max_length=64
+        pgettext_lazy("Treatment Pronouns for the customer", "Title"), max_length=64, blank=True, null=True
     )
     first_name = models.CharField(_("First name"), null=True, max_length=255)
     last_name = models.CharField(_("Last name"), null=True, max_length=255)
     email = models.EmailField(null=True, blank=True)
     phone = PhoneNumberField(null=True, blank=True)
     status = models.CharField(
-        _("Status of Lead"), max_length=255, blank=True, null=True, choices=LEAD_STATUS
+        _("Status of Lead"), max_length=20, blank=True, null=True, choices=LEAD_STATUS, default="NEW"
     )
     source = models.CharField(
-        _("Source of Lead"), max_length=255, blank=True, null=True, choices=LEAD_SOURCE
+        _("Source of Lead"), max_length=20, blank=True, null=True, choices=LEAD_SOURCE
     )
+    # Department field
+    department = models.CharField(
+        _("Department"), max_length=20, choices=DEPARTMENT_CHOICES, default="SALES", blank=True, null=True
+    )
+    # Preferred Language field
+    preferred_language = models.CharField(
+        _("Preferred Language"), max_length=20, choices=LANGUAGE_CHOICES, default="ENGLISH", blank=True, null=True
+    )
+    # Rating field
+    rating = models.CharField(
+        _("Rating"), max_length=10, choices=LEAD_RATING_CHOICES, blank=True, null=True
+    )
+    # Budget Range field
+    budget_range = models.CharField(
+        _("Budget Range"), max_length=20, choices=BUDGET_RANGE_CHOICES, blank=True, null=True
+    )
+    # Decision Timeframe field
+    decision_timeframe = models.CharField(
+        _("Decision Timeframe"), max_length=25, choices=DECISION_TIMEFRAME_CHOICES, blank=True, null=True
+    )
+    # Do Not Call field
+    do_not_call = models.BooleanField(_("Do Not Call"), default=False)
+
     address_line = models.CharField(_("Address"), max_length=255, blank=True, null=True)
     street = models.CharField(_("Street"), max_length=55, blank=True, null=True)
     city = models.CharField(_("City"), max_length=255, blank=True, null=True)
@@ -52,7 +88,7 @@ class Lead(BaseModel):
     postcode = models.CharField(
         _("Post/Zip-code"), max_length=64, blank=True, null=True
     )
-    country = models.CharField(max_length=3, choices=COUNTRIES, blank=True, null=True)
+    country = models.CharField(max_length=3, choices=COUNTRIES, blank=True, null=True, default="NLD")
     website = models.CharField(_("Website"), max_length=255, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     assigned_to = models.ManyToManyField(Profile, related_name="lead_assigned_users")

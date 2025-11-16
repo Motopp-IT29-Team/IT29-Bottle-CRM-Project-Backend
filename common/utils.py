@@ -26,36 +26,13 @@ def jwt_payload_handler(user):
 
 
 INDCHOICES = (
-    ("ADVERTISING", "ADVERTISING"),
-    ("AGRICULTURE", "AGRICULTURE"),
-    ("APPAREL & ACCESSORIES", "APPAREL & ACCESSORIES"),
-    ("AUTOMOTIVE", "AUTOMOTIVE"),
-    ("BANKING", "BANKING"),
-    ("BIOTECHNOLOGY", "BIOTECHNOLOGY"),
-    ("BUILDING MATERIALS & EQUIPMENT", "BUILDING MATERIALS & EQUIPMENT"),
-    ("CHEMICAL", "CHEMICAL"),
-    ("COMPUTER", "COMPUTER"),
-    ("EDUCATION", "EDUCATION"),
-    ("ELECTRONICS", "ELECTRONICS"),
-    ("ENERGY", "ENERGY"),
-    ("ENTERTAINMENT & LEISURE", "ENTERTAINMENT & LEISURE"),
-    ("FINANCE", "FINANCE"),
-    ("FOOD & BEVERAGE", "FOOD & BEVERAGE"),
-    ("GROCERY", "GROCERY"),
-    ("HEALTHCARE", "HEALTHCARE"),
-    ("INSURANCE", "INSURANCE"),
-    ("LEGAL", "LEGAL"),
-    ("MANUFACTURING", "MANUFACTURING"),
-    ("PUBLISHING", "PUBLISHING"),
-    ("REAL ESTATE", "REAL ESTATE"),
-    ("SERVICE", "SERVICE"),
-    ("SOFTWARE", "SOFTWARE"),
-    ("SPORTS", "SPORTS"),
-    ("TECHNOLOGY", "TECHNOLOGY"),
-    ("TELECOMMUNICATIONS", "TELECOMMUNICATIONS"),
-    ("TELEVISION", "TELEVISION"),
-    ("TRANSPORTATION", "TRANSPORTATION"),
-    ("VENTURE CAPITAL", "VENTURE CAPITAL"),
+    ("AUTOMOTIVE", "Automotive"),
+    ("EDUCATION", "Education"),
+    ("FINANCE", "Finance"),
+    ("HEALTHCARE", "Healthcare"),
+    ("NON_PROFIT", "Non-Profit"),
+    ("TECHNOLOGY", "Technology"),
+    ("OTHER", "Other"),
 )
 
 TYPECHOICES = (
@@ -71,22 +48,126 @@ ROLES = (
 )
 
 LEAD_STATUS = (
-    ("assigned", "Assigned"),
-    ("in process", "In Process"),
-    ("converted", "Converted"),
-    ("recycled", "Recycled"),
-    ("closed", "Closed"),
+    ("NEW", "New"),
+    ("WORKING", "Working"),
+    ("QUALIFIED", "Qualified"),
+    ("UNQUALIFIED", "Unqualified"),
+    ("ON_HOLD", "On Hold"),
+    ("CONVERTED", "Converted"),
+    ("CLOSED", "Closed"),
 )
 
 
 LEAD_SOURCE = (
-    ("call", "Call"),
-    ("email", "Email"),
-    ("existing customer", "Existing Customer"),
-    ("partner", "Partner"),
-    ("public relations", "Public Relations"),
-    ("compaign", "Campaign"),
-    ("other", "Other"),
+    ("WEBSITE", "Website"),
+    ("REFERRAL", "Referral"),
+    ("EVENT", "Event"),
+    ("EMAIL_CAMPAIGN", "Email Campaign"),
+    ("PARTNER", "Partner"),
+    ("PHONE_INQUIRY", "Phone Inquiry"),
+    ("OTHER", "Other"),
+)
+
+# Salutation choices
+SALUTATION_CHOICES = (
+    ("MR", "Mr"),
+    ("MS", "Ms"),
+    ("MRS", "Mrs"),
+    ("DR", "Dr"),
+    ("PROF", "Prof"),
+)
+
+# Department choices
+DEPARTMENT_CHOICES = (
+    ("SALES", "Sales"),
+    ("MARKETING", "Marketing"),
+    ("SUPPORT", "Support"),
+    ("FINANCE", "Finance"),
+    ("OPERATIONS", "Operations"),
+)
+
+# Preferred Language choices
+LANGUAGE_CHOICES = (
+    ("ENGLISH", "English"),
+    ("DUTCH", "Dutch"),
+    ("ARABIC", "Arabic"),
+    ("GERMAN", "German"),
+    ("FRENCH", "French"),
+    ("SPANISH", "Spanish"),
+)
+
+# Lead Rating choices
+LEAD_RATING_CHOICES = (
+    ("HOT", "Hot"),
+    ("WARM", "Warm"),
+    ("COLD", "Cold"),
+)
+
+# Budget Range choices
+BUDGET_RANGE_CHOICES = (
+    ("LESS_THAN_5000", "Less than €5,000"),
+    ("5000_TO_10000", "€5,000–€10,000"),
+    ("10000_TO_25000", "€10,000–€25,000"),
+    ("OVER_25000", "Over €25,000"),
+)
+
+# Decision Timeframe choices
+DECISION_TIMEFRAME_CHOICES = (
+    ("WITHIN_1_WEEK", "Within 1 week"),
+    ("WITHIN_1_MONTH", "Within 1 month"),
+    ("WITHIN_3_MONTHS", "Within 3 months"),
+    ("MORE_THAN_3_MONTHS", "More than 3 months"),
+)
+
+# Netherlands States/Provinces
+NETHERLANDS_STATES = (
+    ("NOORD_HOLLAND", "Noord-Holland"),
+    ("ZUID_HOLLAND", "Zuid-Holland"),
+    ("UTRECHT", "Utrecht"),
+    ("GELDERLAND", "Gelderland"),
+    ("NOORD_BRABANT", "Noord-Brabant"),
+    ("OVERIJSSEL", "Overijssel"),
+    ("LIMBURG", "Limburg"),
+    ("GRONINGEN", "Groningen"),
+    ("FRIESLAND", "Friesland"),
+    ("DRENTHE", "Drenthe"),
+    ("ZEELAND", "Zeeland"),
+    ("FLEVOLAND", "Flevoland"),
+)
+
+# Belgium States/Provinces
+BELGIUM_STATES = (
+    ("ANTWERP", "Antwerp"),
+    ("EAST_FLANDERS", "East Flanders"),
+    ("WEST_FLANDERS", "West Flanders"),
+    ("FLEMISH_BRABANT", "Flemish Brabant"),
+    ("WALLOON_BRABANT", "Walloon Brabant"),
+    ("LIEGE", "Liège"),
+    ("LUXEMBOURG", "Luxembourg"),
+    ("NAMUR", "Namur"),
+    ("HAINAUT", "Hainaut"),
+    ("LIMBURG_BE", "Limburg"),
+    ("BRUSSELS", "Brussels-Capital Region"),
+)
+
+# German States
+GERMANY_STATES = (
+    ("BADEN_WURTTEMBERG", "Baden-Württemberg"),
+    ("BAVARIA", "Bavaria"),
+    ("BERLIN", "Berlin"),
+    ("BRANDENBURG", "Brandenburg"),
+    ("BREMEN", "Bremen"),
+    ("HAMBURG", "Hamburg"),
+    ("HESSE", "Hesse"),
+    ("LOWER_SAXONY", "Lower Saxony"),
+    ("MECKLENBURG_VORPOMMERN", "Mecklenburg-Vorpommern"),
+    ("NORTH_RHINE_WESTPHALIA", "North Rhine-Westphalia"),
+    ("RHINELAND_PALATINATE", "Rhineland-Palatinate"),
+    ("SAARLAND", "Saarland"),
+    ("SAXONY", "Saxony"),
+    ("SAXONY_ANHALT", "Saxony-Anhalt"),
+    ("SCHLESWIG_HOLSTEIN", "Schleswig-Holstein"),
+    ("THURINGIA", "Thuringia"),
 )
 
 STATUS_CHOICE = (
