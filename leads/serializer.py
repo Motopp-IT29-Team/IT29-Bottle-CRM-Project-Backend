@@ -48,6 +48,7 @@ class LeadSerializer(serializers.ModelSerializer):
         # fields = ‘__all__’
         fields = (
             "id",
+            "salutation",
             "title",
             "first_name",
             "last_name",
@@ -55,6 +56,12 @@ class LeadSerializer(serializers.ModelSerializer):
             "email",
             "status",
             "source",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
+            "do_not_call",
             "address_line",
             "contacts",
             "street",
@@ -138,6 +145,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lead
         fields = (
+            "salutation",
             "first_name",
             "last_name",
             "account_name",
@@ -146,6 +154,12 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "email",
             "status",
             "source",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
+            "do_not_call",
             "website",
             "description",
             "address_line",
@@ -167,11 +181,121 @@ class LeadCreateSerializer(serializers.ModelSerializer):
         )
 
 class LeadCreateSwaggerSerializer(serializers.ModelSerializer):
+    # Explicitly define choice fields to ensure they show as dropdowns in Swagger
+    salutation = serializers.ChoiceField(choices=[
+        ("MR", "Mr"),
+        ("MS", "Ms"), 
+        ("MRS", "Mrs"),
+        ("DR", "Dr"),
+        ("PROF", "Prof"),
+    ], required=False, allow_blank=True)
+
+    department = serializers.ChoiceField(choices=[
+        ("SALES", "Sales"),
+        ("MARKETING", "Marketing"),
+        ("SUPPORT", "Support"),
+        ("FINANCE", "Finance"),
+        ("OPERATIONS", "Operations"),
+    ], required=False, allow_blank=True)
+
+    preferred_language = serializers.ChoiceField(choices=[
+        ("ENGLISH", "English"),
+        ("DUTCH", "Dutch"),
+        ("ARABIC", "Arabic"),
+        ("GERMAN", "German"),
+        ("FRENCH", "French"),
+        ("SPANISH", "Spanish"),
+    ], required=False, allow_blank=True)
+
+    rating = serializers.ChoiceField(choices=[
+        ("HOT", "Hot"),
+        ("WARM", "Warm"),
+        ("COLD", "Cold"),
+    ], required=False, allow_blank=True)
+
+    budget_range = serializers.ChoiceField(choices=[
+        ("LESS_THAN_5000", "Less than €5,000"),
+        ("5000_TO_10000", "€5,000–€10,000"),
+        ("10000_TO_25000", "€10,000–€25,000"),
+        ("OVER_25000", "Over €25,000"),
+    ], required=False, allow_blank=True)
+
+    decision_timeframe = serializers.ChoiceField(choices=[
+        ("WITHIN_1_WEEK", "Within 1 week"),
+        ("WITHIN_1_MONTH", "Within 1 month"),
+        ("WITHIN_3_MONTHS", "Within 3 months"),
+        ("MORE_THAN_3_MONTHS", "More than 3 months"),
+    ], required=False, allow_blank=True)
+
+    status = serializers.ChoiceField(choices=[
+        ("NEW", "New"),
+        ("WORKING", "Working"),
+        ("QUALIFIED", "Qualified"),
+        ("UNQUALIFIED", "Unqualified"),
+        ("ON_HOLD", "On Hold"),
+        ("CONVERTED", "Converted"),
+        ("CLOSED", "Closed"),
+    ], required=False, allow_blank=True)
+
+    source = serializers.ChoiceField(choices=[
+        ("WEBSITE", "Website"),
+        ("REFERRAL", "Referral"),
+        ("EVENT", "Event"),
+        ("EMAIL_CAMPAIGN", "Email Campaign"),
+        ("PARTNER", "Partner"),
+        ("PHONE_INQUIRY", "Phone Inquiry"),
+        ("OTHER", "Other"),
+    ], required=False, allow_blank=True)
+
+    industry = serializers.ChoiceField(choices=[
+        ("AUTOMOTIVE", "Automotive"),
+        ("EDUCATION", "Education"),
+        ("FINANCE", "Finance"),
+        ("HEALTHCARE", "Healthcare"),
+        ("NON_PROFIT", "Non-Profit"),
+        ("TECHNOLOGY", "Technology"),
+        ("OTHER", "Other"),
+    ], required=False, allow_blank=True)
+
     class Meta:
         model = Lead
-        fields = ["title","first_name","last_name","account_name","phone","email","lead_attachment","opportunity_amount","website",
-                "description","teams","assigned_to","contacts","status","source","address_line","street","city","state","postcode",
-                "country","tags","company","probability","industry","skype_ID"]
+        fields = [
+            "salutation",
+            "title",
+            "first_name",
+            "last_name",
+            "account_name",
+            "phone",
+            "email",
+            "status",
+            "source",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
+            "do_not_call",
+            "lead_attachment",
+            "opportunity_amount",
+            "website",
+            "description",
+            "teams",
+            "assigned_to",
+            "contacts",
+            "address_line",
+            "street",
+            "city",
+            "state",
+            "postcode",
+            "country",
+            "tags",
+            "company",
+            "probability",
+            "industry",
+            "skype_ID",
+            "organization",
+            "close_date",
+        ]
 
 
 class CreateLeadFromSiteSwaggerSerializer(serializers.Serializer):
