@@ -21,6 +21,12 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Collect static files and run
-CMD python manage.py migrate && \
-    gunicorn crm.wsgi:application --bind 0.0.0.0:$PORT --workers 2
+# Run migrations, collect static, and start gunicorn
+CMD python manage.py migrate --noinput && \
+    python manage.py collectstatic --noinput && \
+    gunicorn crm.wsgi:application \
+    --bind 0.0.0.0:$PORT \
+    --workers 2 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
