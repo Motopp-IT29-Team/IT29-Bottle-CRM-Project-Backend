@@ -1,9 +1,7 @@
 FROM ubuntu:20.04
 
-# invalidate cache
 ARG APP_NAME
 
-# test arg
 RUN test -n "$APP_NAME"
 
 # install system packages
@@ -35,14 +33,18 @@ RUN /home/ubuntu/"$APP_NAME"/venv/bin/pip install -U pip
 RUN /home/ubuntu/"$APP_NAME"/venv/bin/pip install -r requirements.txt
 RUN /home/ubuntu/"$APP_NAME"/venv/bin/pip install gunicorn
 
+# Copy production env
+RUN cp db.env.production db.env || true
+
 # setup path
 ENV PATH="${PATH}:/home/ubuntu/$APP_NAME/$APP_NAME/scripts"
 
-# Expose port
-EXPOSE 10000
+# Expose port (Railway sets $PORT automatically)
+EXPOSE $PORT
 
 # Run migrations and start gunicorn
-CMD /home/ubuntu/"$APP_NAME"/venv/bin/python /home/ubuntu/"$APP_NAME"/"$APP_NAME"/manage.py migrate && \
+CMD set -a && source db.env && set +a && \
+    /home/ubuntu/"$APP_NAME"/venv/bin/python /home/ubuntu/"$APP_NAME"/"$APP_NAME"/manage.py migrate && \
     /home/ubuntu/"$APP_NAME"/venv/bin/gunicorn crm.wsgi:application \
     --bind 0.0.0.0:$PORT \
     --workers 2 \
