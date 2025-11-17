@@ -67,6 +67,11 @@ import secrets
 import string
 from rest_framework.permissions import AllowAny
 import datetime
+from rest_framework import permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
+from common.serializer import EmailTokenObtainPairSerializer
 
 
 class GetTeamsAndUsersView(APIView):
@@ -263,13 +268,17 @@ class UsersListView(APIView, LimitOffsetPagination):
         try:
             with transaction.atomic():
                 address_obj = address_serializer.save()
-                user = user_serializer.save(is_active=False)
 
+                # Generate password before creating user
                 password = params.get("password")
                 if not password:
                     alphabet = string.ascii_letters + string.digits
                     password = ''.join(secrets.choice(alphabet) for i in range(12))
 
+                # Add password to validated_data
+                user_serializer.validated_data['password'] = password
+
+                user = user_serializer.save(is_active=False)
                 user.set_password(password)
                 user.save()
 
@@ -283,9 +292,9 @@ class UsersListView(APIView, LimitOffsetPagination):
 
             send_email_to_new_user.delay(user.id)
 
-        except Exception:
+        except Exception as e:
             return Response(
-                {"error": True, "errors": "Failed to create user"},
+                {"error": True, "errors": f"Failed to create user: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -1065,3 +1074,13 @@ class GoogleLoginView(APIView):
         response['refresh_token'] = str(token)
         response['user_id'] = user.id
         return Response(response)
+
+class EmailLoginView(TokenObtainPairView):
+    """
+    POST /api/auth/login/
+    Body: { "email": "user@example.com", "password": "MySecurePass123" }
+    Response: { "refresh": "...", "access": "..." }
+    """
+    serializer_class = EmailTokenObtainPairSerializer
+    authentication_classes = []  # public
+    permission_classes = []

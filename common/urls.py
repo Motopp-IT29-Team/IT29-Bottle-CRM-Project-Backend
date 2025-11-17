@@ -2,12 +2,18 @@ from django.urls import path
 from rest_framework_simplejwt import views as jwt_views
 
 from common import views
+from django.urls import path
+from common.views import  EmailLoginView
 
 app_name = "api_common"
 
 
 urlpatterns = [
     path("dashboard/", views.ApiHomeView.as_view()),
+
+    # email + password login (SimpleJWT)
+    path("auth/login/", EmailLoginView.as_view(), name="email_login"),
+
     path(
         "auth/refresh-token/",
         jwt_views.TokenRefreshView.as_view(),
