@@ -36,15 +36,11 @@ RUN /home/ubuntu/"${APP_NAME}"/venv/bin/pip install gunicorn
 # Copy production env
 RUN cp db.env.production db.env || true
 
-# Copy and set permissions for entrypoint
-COPY --chown=ubuntu:ubuntu entrypoint.sh /home/ubuntu/entrypoint.sh
-RUN chmod +x /home/ubuntu/entrypoint.sh
-
 # setup path
 ENV PATH="${PATH}:/home/ubuntu/${APP_NAME}/${APP_NAME}/scripts"
 
-# Expose port
-EXPOSE $PORT
+# Set default PORT
+ENV PORT=8000
 
-# Run entrypoint
-CMD ["/home/ubuntu/entrypoint.sh"]
+# Run migrations and start gunicorn (shell form to expand variables)
+CMD /bin/bash -c "set -a && [ -f db.env ] && source db.env && set +a && /home/ubuntu/${APP_NAME}/venv/bin/python /home/ubuntu/${APP_NAME}/${APP_NAME}/manage.py migrate && /home/ubuntu/${APP_NAME}/venv/bin/gunicorn crm.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 --access-logfile - --error-logfile -"
