@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: bottle-crm-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: APP_NAME
+        value: bottle-crm
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: ENV_TYPE
+        value: prod
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: DOMAIN_NAME
+        value: https://it-29-bottle-crm-project-frontend.vercel.app
+      - key: DATABASE_URL
+        value: postgresql://bottle_crm_user:w8tzSIbxiCk34jA2dox6gQqnayM6d1dw@dpg-d4bf467pm1nc73botv40-a/bottle_crm_ir00
+      - key: DBNAME
+        value: bottle_crm_ir00
+      - key: DBUSER
+        value: bottle_crm_user
+      - key: DBPASSWORD
+        value: w8tzSIbxiCk34jA2dox6gQqnayM6d1dw
+      - key: DBHOST
+        value: dpg-d4bf467pm1nc73botv40-a
+      - key: DBPORT
+        value: "5432"
+      - key: CELERY_BROKER_URL
+        value: redis://default:AUauAAIncDI1YzE1ZjVkYmI3YjA0ZGNiOWE3YzczOTliYjQyMTIyMXAyMTgwOTQ@noble-seal-18094.upstash.io:6379
+      - key: CELERY_RESULT_BACKEND
+        value: redis://default:AUauAAIncDI1YzE1ZjVkYmI3YjA0ZGNiOWE3YzczOTliYjQyMTIyMXAyMTgwOTQ@noble-seal-18094.upstash.io:6379
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        value: merkot.anton@gmail.com
+      - key: EMAIL_HOST_PASSWORD
+        value: fusz lcdk dhpx krqp
+      - key: DEFAULT_FROM_EMAIL
+        value: merkot.anton@gmail.com
+      - key: ADMIN_EMAIL
+        value: merkot.anton@gmail.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://it-29-bottle-crm-project-frontend.vercel.app,https://*.onrender.com
+      - key: CORS_ORIGIN_ALLOW_ALL
+        value: "True"
+
+databases:
+  - name: bottle-crm-db
+    databaseName: bottle_crm
+    user: bottle_crm_user
