@@ -43,4 +43,12 @@ ENV PATH="${PATH}:/home/ubuntu/${APP_NAME}/${APP_NAME}/scripts"
 EXPOSE 10000
 
 # Run migrations and start gunicorn
-CMD ["/bin/bash", "-c", "set -a && [ -f db.env ] && source db.env && set +a && /home/ubuntu/${APP_NAME}/venv/bin/python /home/ubuntu/${APP_NAME}/${APP_NAME}/manage.py migrate && /home/ubuntu/${APP_NAME}/venv/bin/gunicorn crm.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 --access-logfile - --error-logfile -"]
+CMD /home/ubuntu/bottle-crm/venv/bin/python /home/ubuntu/bottle-crm/bottle-crm/manage.py migrate --noinput && \
+    echo "Migrations completed, starting gunicorn..." && \
+    /home/ubuntu/bottle-crm/venv/bin/gunicorn crm.wsgi:application \
+    --bind 0.0.0.0:$PORT \
+    --workers 2 \
+    --timeout 120 \
+    --log-level debug \
+    --access-logfile - \
+    --error-logfile -
