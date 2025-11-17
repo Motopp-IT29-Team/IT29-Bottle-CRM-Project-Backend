@@ -1,46 +1,26 @@
-FROM ubuntu:20.04
+FROM python:3.11-slim
 
-# Set default APP_NAME if not provided
-ARG APP_NAME=bottle-crm
-ENV APP_NAME=${APP_NAME}
+WORKDIR /app
 
-# install system packages
-RUN apt-get update -y
-RUN apt-get install -y \
-  python3-pip \
-  python3-venv \
-  build-essential \
-  libpq-dev \
-  libmariadbclient-dev \
-  libjpeg62-dev \
-  zlib1g-dev \
-  libwebp-dev \
-  curl  \
-  vim \
-  net-tools
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# setup user
-RUN useradd -ms /bin/bash ubuntu
-USER ubuntu
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install gunicorn
 
-# install app
-RUN mkdir -p /home/ubuntu/"${APP_NAME}"/"${APP_NAME}"
-WORKDIR /home/ubuntu/"${APP_NAME}"/"${APP_NAME}"
-COPY --chown=ubuntu:ubuntu . .
-RUN python3 -m venv ../venv
-RUN . ../venv/bin/activate
-RUN /home/ubuntu/"${APP_NAME}"/venv/bin/pip install -U pip
-RUN /home/ubuntu/"${APP_NAME}"/venv/bin/pip install -r requirements.txt
-RUN /home/ubuntu/"${APP_NAME}"/venv/bin/pip install gunicorn
+# Copy project
+COPY . .
 
-# Copy production env
-RUN cp db.env.production db.env || true
-
-# setup path
-ENV PATH="${PATH}:/home/ubuntu/${APP_NAME}/${APP_NAME}/scripts"
-
-# Set default PORT
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Run migrations and start gunicorn (shell form to expand variables)
-CMD /bin/bash -c "set -a && [ -f db.env ] && source db.env && set +a && /home/ubuntu/${APP_NAME}/venv/bin/python /home/ubuntu/${APP_NAME}/${APP_NAME}/manage.py migrate && /home/ubuntu/${APP_NAME}/venv/bin/gunicorn crm.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 --access-logfile - --error-logfile -"
+# Collect static files and run
+CMD python manage.py migrate && \
+    gunicorn crm.wsgi:application --bind 0.0.0.0:$PORT --workers 2
