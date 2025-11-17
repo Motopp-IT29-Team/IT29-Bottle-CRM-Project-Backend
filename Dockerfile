@@ -17,16 +17,13 @@ RUN pip install gunicorn
 # Copy project
 COPY . .
 
+# Copy and set permissions for start script
+COPY start.sh .
+RUN chmod +x start.sh
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Run migrations, collect static, and start gunicorn
-CMD python manage.py migrate --noinput && \
-    python manage.py collectstatic --noinput && \
-    gunicorn crm.wsgi:application \
-    --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile -
+# Run start script
+CMD ["./start.sh"]
