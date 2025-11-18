@@ -9,19 +9,21 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from common.models import Comment, Profile, User
+from common.models import Comment, User
 from common.token_generator import account_activation_token
 
 app = Celery("redis://")
 
 
-@app.task
 def send_email_to_new_user(user_id):
     """Send Mail To Users When their account is created"""
+
+    print(f"🚀 Task started for user_id: {user_id}")
 
     user_obj = User.objects.filter(id=user_id).first()
 
     if not user_obj:
+        print(f"❌ User {user_id} not found")
         return
 
     context = {}
@@ -54,7 +56,20 @@ def send_email_to_new_user(user_id):
         to=[user_obj.email],
     )
     msg.content_subtype = "html"
-    msg.send()
+
+    # Add timeout to prevent hanging
+    import socket
+    original_timeout = socket.getdefaulttimeout()
+
+    try:
+        socket.setdefaulttimeout(10)  # 10 second timeout
+        msg.send()
+        print(f"✅ Email sent to {user_obj.email}")
+    except Exception as e:
+        print(f"❌ Email failed: {str(e)}")
+        # Don't raise exception - let user creation succeed
+    finally:
+        socket.setdefaulttimeout(original_timeout)
 
 
 @app.task
