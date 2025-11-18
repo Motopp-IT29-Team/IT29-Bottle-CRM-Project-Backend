@@ -63,6 +63,10 @@ from opportunity.models import Opportunity
 from opportunity.serializer import OpportunitySerializer
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
+import secrets
+import string
+from rest_framework.permissions import AllowAny
+import datetime
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -87,64 +91,160 @@ class GetTeamsAndUsersView(APIView):
         data["profiles"] = profiles_data
         return Response(data)
 
+class ActivateUserView(APIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request, uid, token, activation_key):
+        try:
+            user_id = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=user_id)
+
+            if user.is_active:
+                return Response(
+                    {"error": "Account already activated"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if user.activation_key != activation_key:
+                return Response(
+                    {"error": "Invalid or expired activation link"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            activation_time_str = activation_key.replace(token, '')
+            activation_time = datetime.datetime.strptime(
+                activation_time_str, "%Y-%m-%d-%H-%M-%S"
+            )
+            activation_time = activation_time.replace(tzinfo=datetime.timezone.utc)
+
+            if datetime.datetime.now(datetime.timezone.utc) > activation_time:
+                return Response(
+                    {"error": "Activation link has expired"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if not account_activation_token.check_token(user, token):
+                return Response(
+                    {"error": "Invalid activation token"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(
+                {
+                    "message": "Link is valid",
+                    "email": user.email
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response(
+                {"error": "Invalid activation link"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def post(self, request, uid, token, activation_key):
+        try:
+            user_id = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=user_id)
+
+            if user.is_active:
+                return Response(
+                    {"error": "Account already activated"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if user.activation_key != activation_key:
+                return Response(
+                    {"error": "Invalid or expired activation link"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            activation_time_str = activation_key.replace(token, '')
+            activation_time = datetime.datetime.strptime(
+                activation_time_str, "%Y-%m-%d-%H-%M-%S"
+            )
+            activation_time = activation_time.replace(tzinfo=datetime.timezone.utc)
+
+            if datetime.datetime.now(datetime.timezone.utc) > activation_time:
+                return Response(
+                    {"error": "Activation link has expired"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if not account_activation_token.check_token(user, token):
+                return Response(
+                    {"error": "Invalid activation token"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            password = request.data.get('password')
+            password_confirm = request.data.get('password_confirm')
+
+            if not password:
+                return Response(
+                    {"error": "Password is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if password != password_confirm:
+                return Response(
+                    {"error": "Passwords do not match"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if len(password) < 8:
+                return Response(
+                    {"error": "Password must be at least 8 characters"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            user.set_password(password)
+            user.is_active = True
+            user.activation_key = None
+            user.save()
+
+            from rest_framework_simplejwt.tokens import RefreshToken
+            refresh = RefreshToken.for_user(user)
+
+            return Response(
+                {
+                    "message": "Account activated successfully",
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "user": {
+                        "email": user.email,
+                        "id": str(user.id)
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response(
+                {"error": "Invalid activation link"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": "Activation failed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 class UsersListView(APIView, LimitOffsetPagination):
-
     permission_classes = (IsAuthenticated,)
-    @extend_schema(parameters=swagger_params1.organization_params,request=UserCreateSwaggerSerializer)
+
+    @extend_schema(
+        parameters=swagger_params1.organization_params,
+        request=UserCreateSwaggerSerializer
+    )
     def post(self, request, format=None):
-        print(request.profile.role, request.user.is_superuser)
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
+        if request.profile.role != "ADMIN" and not request.user.is_superuser:
             return Response(
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-<<<<<<< Updated upstream
-        else:
-            params = request.data
-            if params:
-                user_serializer = CreateUserSerializer(data=params, org=request.profile.org)
-                address_serializer = BillingAddressSerializer(data=params)
-                profile_serializer = CreateProfileSerializer(data=params)
-                data = {}
-                if not user_serializer.is_valid():
-                    data["user_errors"] = dict(user_serializer.errors)
-                if not profile_serializer.is_valid():
-                    data["profile_errors"] = profile_serializer.errors
-                if not address_serializer.is_valid():
-                    data["address_errors"] = (address_serializer.errors,)
-                if data:
-                    return Response(
-                        {"error": True, "errors": data},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                if address_serializer.is_valid():
-                    address_obj = address_serializer.save()
-                    user = user_serializer.save(
-                        is_active=True,
-                    )
-                    user.email = user.email
-                    user.save()
-                    # if params.get("password"):
-                    #     user.set_password(params.get("password"))
-                    #     user.save()
-                    profile = Profile.objects.create(
-                        user=user,
-                        date_of_joining=timezone.now(),
-                        role=params.get("role"),
-                        address=address_obj,
-                        org=request.profile.org,
-                    )
-
-                    # send_email_to_new_user.delay(
-                    #     profile.id,
-                    #     request.profile.org.id,
-                    # )
-                    return Response(
-                        {"error": False, "message": "User Created Successfully"},
-                        status=status.HTTP_201_CREATED,
-                    )
-=======
 
         params = request.data
         user_serializer = CreateUserSerializer(data=params, org=request.profile.org)
@@ -202,7 +302,6 @@ class UsersListView(APIView, LimitOffsetPagination):
             {"error": False, "message": "User created successfully"},
             status=status.HTTP_201_CREATED,
         )
->>>>>>> Stashed changes
 
 
     @extend_schema(parameters=swagger_params1.user_list_params)
@@ -500,9 +599,9 @@ class ProfileView(APIView):
 
     @extend_schema(parameters=swagger_params1.organization_params)
     def get(self, request, format=None):
-        # profile=Profile.objects.get(user=request.user)
+        profile = Profile.objects.get(user=request.user)
         context = {}
-        context["user_obj"] = ProfileSerializer(self.request.profile).data
+        context["user_obj"] = ProfileSerializer(profile).data
         return Response(context, status=status.HTTP_200_OK)
 
 class DocumentListView(APIView, LimitOffsetPagination):
