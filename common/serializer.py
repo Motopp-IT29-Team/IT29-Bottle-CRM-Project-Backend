@@ -148,15 +148,18 @@ class CreateUserSerializer(serializers.ModelSerializer):
         self.fields["email"].required = True
 
     def validate_email(self, email):
+        email = email.lower()
+
         if self.instance:
             if self.instance.email != email:
-                if not Profile.objects.filter(user__email=email, org=self.org).exists():
-                    return email
-                raise serializers.ValidationError("Email already exists")
+                if Profile.objects.filter(user__email=email, org=self.org).exists():
+                    raise serializers.ValidationError("Email already exists")
             return email
-        if not Profile.objects.filter(user__email=email.lower(), org=self.org).exists():
-            return email
-        raise serializers.ValidationError("Given Email id already exists")
+
+        if Profile.objects.filter(user__email=email, org=self.org).exists():
+            raise serializers.ValidationError("Given Email id already exists")
+
+        return email
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
@@ -191,7 +194,7 @@ class CreateProfileSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         self.fields["alternate_phone"].required = False
         self.fields["role"].required = True
-        self.fields["phone"].required = True
+        # self.fields["phone"].required = False
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -286,9 +289,9 @@ def find_urls(string):
     # website_regex = "^((http|https)://)?([A-Za-z0-9.-]+\.[A-Za-z]{2,63})?$"  # (http(s)://)google.com or google.com
     # website_regex = "^https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,63})?$"  # (http(s)://)google.com
     # http(s)://google.com
-    website_regex = "^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$"
+    website_regex = r"^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$"
     # http(s)://google.com:8000
-    website_regex_port = "^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}:[0-9]{2,4}$"
+    website_regex_port = r"^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}:[0-9]{2,4}$"
     url = re.findall(website_regex, string)
     url_port = re.findall(website_regex_port, string)
     if url and url[0] != "":

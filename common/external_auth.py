@@ -2,7 +2,7 @@ import jwt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
-from common.models import Org,Profile,User
+from common.models import Org, Profile, User
 from django.conf import settings
 
 def verify_jwt_token(token):
@@ -22,7 +22,14 @@ class CustomDualAuthentication(BaseAuthentication):
         profile = None
 
         # Check JWT authentication
-        jwt_token = request.headers.get('Authorization', '').split(' ')[1] if 'Authorization' in request.headers else None
+        jwt_token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers.get('Authorization', '')
+            if ' ' in auth_header:
+                jwt_token = auth_header.split(' ')[1]
+            else:
+                jwt_token = auth_header
+
         if jwt_token:
             is_valid, jwt_payload = verify_jwt_token(jwt_token)
             if is_valid:

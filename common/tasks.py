@@ -1,4 +1,5 @@
 import datetime
+import os
 
 from celery import Celery
 from django.conf import settings
@@ -9,53 +10,62 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from common.models import Comment, Profile, User
+from common.models import Comment, User
 from common.token_generator import account_activation_token
+
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 app = Celery("redis://")
 
-
-@app.task
 def send_email_to_new_user(user_id):
-
     """Send Mail To Users When their account is created"""
+
+    print(f"🚀 Sending email for user_id: {user_id}")
+
     user_obj = User.objects.filter(id=user_id).first()
 
-    if user_obj:
-        context = {}
-        user_email = user_obj.email
-        context["url"] = settings.DOMAIN_NAME
-        context["uid"] = (urlsafe_base64_encode(force_bytes(user_obj.pk)),)
-        context["token"] = account_activation_token.make_token(user_obj)
-        time_delta_two_hours = datetime.datetime.strftime(
-            timezone.now() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
-        )
-        # creating an activation token and saving it in user model
-        activation_key = context["token"] + time_delta_two_hours
-        user_obj.activation_key = activation_key
-        user_obj.save()
+    if not user_obj:
+        print(f"❌ User {user_id} not found")
+        return
 
-        context["complete_url"] = context[
-            "url"
-        ] + "/auth/activate-user/{}/{}/{}/".format(
-            context["uid"][0],
-            context["token"],
-            activation_key,
-        )
-        recipients = [
-            user_email,
-        ]
-        subject = "Welcome to Bottle CRM"
-        html_content = render_to_string("user_status_in.html", context=context)
+    context = {}
+    context["url"] = settings.DOMAIN_NAME
+    context["uid"] = urlsafe_base64_encode(force_bytes(user_obj.pk))
+    context["token"] = account_activation_token.make_token(user_obj)
 
-        msg = EmailMessage(
-            subject,
-            html_content,
+    time_delta_two_hours = datetime.datetime.strftime(
+        datetime.datetime.utcnow() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
+    )
+
+    activation_key = context["token"] + time_delta_two_hours
+    user_obj.activation_key = activation_key
+    user_obj.save()
+
+    context["complete_url"] = "{}/auth/activate-user/{}/{}/{}/".format(
+        context["url"],
+        context["uid"],
+        context["token"],
+        activation_key,
+    )
+
+    subject = "Welcome to Bottle CRM"
+    html_content = render_to_string("user_status_in.html", context=context)
+
+    try:
+        message = Mail(
             from_email=settings.DEFAULT_FROM_EMAIL,
-            to=recipients,
+            to_emails=user_obj.email,
+            subject=subject,
+            html_content=html_content
         )
-        msg.content_subtype = "html"
-        msg.send()
+
+        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+        response = sg.send(message)
+        print(f"✅ Email sent to {user_obj.email} (status: {response.status_code})")
+    except Exception as e:
+        print(f"❌ Email failed: {str(e)}")
+        # Don't raise exception - let user creation succeed
 
 
 @app.task
