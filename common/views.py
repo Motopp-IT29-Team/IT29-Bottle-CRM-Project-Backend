@@ -99,6 +99,7 @@ class UsersListView(APIView, LimitOffsetPagination):
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
+<<<<<<< Updated upstream
         else:
             params = request.data
             if params:
@@ -143,6 +144,65 @@ class UsersListView(APIView, LimitOffsetPagination):
                         {"error": False, "message": "User Created Successfully"},
                         status=status.HTTP_201_CREATED,
                     )
+=======
+
+        params = request.data
+        user_serializer = CreateUserSerializer(data=params, org=request.profile.org)
+        address_serializer = BillingAddressSerializer(data=params)
+        profile_serializer = CreateProfileSerializer(data=params)
+
+        errors = {}
+        if not user_serializer.is_valid():
+            errors["user_errors"] = user_serializer.errors
+        if not profile_serializer.is_valid():
+            errors["profile_errors"] = profile_serializer.errors
+        if not address_serializer.is_valid():
+            errors["address_errors"] = address_serializer.errors
+
+        if errors:
+            return Response(
+                {"error": True, "errors": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                address_obj = address_serializer.save()
+
+                # Generate password before creating user
+                password = params.get("password")
+                if not password:
+                    alphabet = string.ascii_letters + string.digits
+                    password = ''.join(secrets.choice(alphabet) for i in range(12))
+
+                # Add password to validated_data
+                user_serializer.validated_data['password'] = password
+
+                user = user_serializer.save(is_active=False)
+                user.set_password(password)
+                user.save()
+
+                Profile.objects.create(
+                    user=user,
+                    date_of_joining=timezone.now(),
+                    role=params.get("role"),
+                    address=address_obj,
+                    org=request.profile.org,
+                )
+
+            send_email_to_new_user(user.id)
+
+        except Exception as e:
+            return Response(
+                {"error": True, "errors": f"Failed to create user: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {"error": False, "message": "User created successfully"},
+            status=status.HTTP_201_CREATED,
+        )
+>>>>>>> Stashed changes
 
 
     @extend_schema(parameters=swagger_params1.user_list_params)
