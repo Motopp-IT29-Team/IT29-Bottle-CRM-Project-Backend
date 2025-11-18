@@ -1,4 +1,5 @@
 import datetime
+import os
 
 from celery import Celery
 from django.conf import settings
@@ -12,13 +13,15 @@ from django.utils.http import urlsafe_base64_encode
 from common.models import Comment, User
 from common.token_generator import account_activation_token
 
-app = Celery("redis://")
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
+app = Celery("redis://")
 
 def send_email_to_new_user(user_id):
     """Send Mail To Users When their account is created"""
 
-    print(f"🚀 Task started for user_id: {user_id}")
+    print(f"🚀 Sending email for user_id: {user_id}")
 
     user_obj = User.objects.filter(id=user_id).first()
 
@@ -49,27 +52,20 @@ def send_email_to_new_user(user_id):
     subject = "Welcome to Bottle CRM"
     html_content = render_to_string("user_status_in.html", context=context)
 
-    msg = EmailMessage(
-        subject,
-        html_content,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[user_obj.email],
-    )
-    msg.content_subtype = "html"
-
-    # Add timeout to prevent hanging
-    import socket
-    original_timeout = socket.getdefaulttimeout()
-
     try:
-        socket.setdefaulttimeout(10)  # 10 second timeout
-        msg.send()
-        print(f"✅ Email sent to {user_obj.email}")
+        message = Mail(
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to_emails=user_obj.email,
+            subject=subject,
+            html_content=html_content
+        )
+
+        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+        response = sg.send(message)
+        print(f"✅ Email sent to {user_obj.email} (status: {response.status_code})")
     except Exception as e:
         print(f"❌ Email failed: {str(e)}")
         # Don't raise exception - let user creation succeed
-    finally:
-        socket.setdefaulttimeout(original_timeout)
 
 
 @app.task
