@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 from datetime import timedelta
 
@@ -5,38 +6,22 @@ from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 import dj_database_url
 
-# JWT_AUTH = {
-#     'JWT_PAYLOAD_GET_USERNAME_HANDLER':
-#     'path.to.custom_jwt_payload_handler',
-#     'JWT_PUBLIC_KEY': None,
-#     'JWT_PRIVATE_KEY': None,
-#     'JWT_ALGORITHM': 'HS256',
-#     'JWT_VERIFY': True,
-#     'JWT_VERIFY_EXPIRATION': True,
-#     'JWT_LEEWAY': 0,
-#     'JWT_EXPIRATION_DELTA': timedelta(seconds=300),
-#     'JWT_AUDIENCE': None,
-#     'JWT_ISSUER': None,
-#     'JWT_ALLOW_REFRESH': False,
-#     'JWT_REFRESH_EXPIRATION_DELTA': timedelta(days=7),
-#     'JWT_AUTH_HEADER_PREFIX': 'Bearer',
-#     'JWT_BEARER_FORMAT': 'Bearer'
-# }
+# ==============================
+# Load the .env environment file
+# ==============================
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
-# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ==============================
+# Basic settings
+# ==============================
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+DEBUG = os.environ.get("DEBUG", "True") == "True"
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
-load_dotenv()
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ["SECRET_KEY"]
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-
-ALLOWED_HOSTS = ["*"]
-
+# ==============================
+# Installed applications
+# ==============================
 INSTALLED_APPS = [
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -79,6 +64,9 @@ INSTALLED_APPS = [
     "teams",
 ]
 
+# ==============================
+# Middlewares
+# ==============================
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -89,19 +77,19 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "crum.CurrentRequestUserMiddleware",
-    # "common.external_auth.CustomDualAuthentication"
     "common.middleware.get_company.GetProfileAndOrg",
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 ]
 
+# ==============================
+# Paths and templates
+# ==============================
 ROOT_URLCONF = "crm.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [
-            os.path.join(BASE_DIR, "templates"),
-        ],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -110,7 +98,6 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "common.context_processors.common.app_name",
-                # "django_settings_export.settings_export",
                 "wagtail.contrib.settings.context_processors.settings",
             ],
         },
@@ -119,67 +106,112 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "crm.wsgi.application"
 
-# Database
-# https://docs.djangoproject.com/en/1.10/ref/settings/#databases
+# ==============================
+# Database - supports both DATABASE_URL and individual DB settings
+# ==============================
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-DATABASES = {
-    "default": dj_database_url.parse(os.environ["DATABASE_URL"])
-}
+if DATABASE_URL:
+    # Production: use DATABASE_URL (Render, Railway, etc.)
+    DATABASES = {
+        "default": dj_database_url.parse(DATABASE_URL)
+    }
+else:
+    # Local: try individual DB settings or fallback to SQLite
+    DB_NAME = os.environ.get("DBNAME")
+    DB_USER = os.environ.get("DBUSER")
+    DB_PASSWORD = os.environ.get("DBPASSWORD")
+    DB_HOST = os.environ.get("DBHOST", "localhost")
+    DB_PORT = os.environ.get("DBPORT", "5432")
 
+    if DB_NAME and DB_USER and DB_PASSWORD:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": DB_NAME,
+                "USER": DB_USER,
+                "PASSWORD": DB_PASSWORD,
+                "HOST": DB_HOST,
+                "PORT": DB_PORT,
+            }
+        }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "db.sqlite3",
+            }
+        }
 
+# ==============================
 # Password validation
-# https://docs.djangoproject.com/en/1.10/ref/settings/#auth-password-validators
-
+# ==============================
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# Internationalization
-# https://docs.djangoproject.com/en/1.10/topics/i18n/
-
-
+# ==============================
+# Language and time zone
+# ==============================
 TIME_ZONE = "Asia/Kolkata"
-
 USE_I18N = True
-
 USE_TZ = True
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# ==============================
+# Email settings
+# ==============================
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip("'\"")  # Remove quotes
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@localhost")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@localhost")
+
+# Fix SSL certificate issue on macOS for local development
+if DEBUG and os.environ.get("ENV_TYPE", "dev") == "dev":
+    import certifi
+    os.environ['SSL_CERT_FILE'] = certifi.where()
 
 AUTH_USER_MODEL = "common.User"
 
+# ==============================
+# Static files
+# ==============================
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-ENV_TYPE = os.environ["ENV_TYPE"]
-print(">>> ENV_TYPE", ENV_TYPE)
+# ==============================
+# Media files
+# ==============================
+ENV_TYPE = os.environ.get("ENV_TYPE", "dev")
+print(">>> ENV_TYPE:", ENV_TYPE)
+
 if ENV_TYPE == "dev":
     MEDIA_ROOT = os.path.join(BASE_DIR, "media")
     MEDIA_URL = "/media/"
 elif ENV_TYPE == "prod":
-    from .server_settings import *
+    try:
+        from .server_settings import *
+    except ImportError:
+        pass
 
-DEFAULT_FROM_EMAIL = os.environ["DEFAULT_FROM_EMAIL"]
-ADMIN_EMAIL = os.environ["ADMIN_EMAIL"]
+# ==============================
+# Celery settings
+# ==============================
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
-
-# celery Tasks
-CELERY_BROKER_URL = os.environ["CELERY_BROKER_URL"]
-CELERY_RESULT_BACKEND = os.environ["CELERY_RESULT_BACKEND"]
-
-
+# ==============================
+# Logging settings
+# ==============================
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -240,27 +272,27 @@ LOGGING = {
     },
 }
 
+# ==============================
+# Wagtail and admin interface settings
+# ==============================
 APPLICATION_NAME = "bottlecrm"
-
 WAGTAIL_SITE_NAME = "bottlecrm"
-
 WAGTAILADMIN_BASE_URL = "https://bottlecrm.com"
-
 SETTINGS_EXPORT = ["APPLICATION_NAME"]
 
+# ==============================
+# REST Framework
+# ==============================
 REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-        "common.external_auth.CustomDualAuthentication"
-        # "rest_framework.authentication.SessionAuthentication",
-        # "rest_framework.authentication.BasicAuthentication",
+        "common.external_auth.CustomDualAuthentication",
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 10,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
-
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "BottleCRM API",
@@ -269,12 +301,7 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "PREPROCESSING_HOOKS": ["common.custom_openapi.preprocessing_filter_spec"],
-    
 }
-
-# JWT_SETTINGS = {
-#     'bearerFormat': ('Bearer', 'jwt', 'Jwt')
-# }
 
 SWAGGER_SETTINGS = {
     "DEFAULT_INFO": "crm.urls.info",
@@ -288,6 +315,9 @@ SWAGGER_SETTINGS = {
     },
 }
 
+# ==============================
+# Security and CORS settings
+# ==============================
 CORS_ALLOW_HEADERS = default_headers + ("org",)
 CORS_ORIGIN_ALLOW_ALL = True
 CSRF_TRUSTED_ORIGINS = ["https://*.runcode.io", "http://*"]
@@ -299,14 +329,16 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-# STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+# ==============================
+# Domain settings
+# ==============================
+DOMAIN_NAME = os.environ.get("DOMAIN_NAME", "http://localhost:3000")
+SWAGGER_ROOT_URL = os.environ.get("SWAGGER_ROOT_URL", "http://localhost:8000")
 
-DOMAIN_NAME = os.getenv("DOMAIN_NAME")
-
-
+# ==============================
+# JWT settings
+# ==============================
 SIMPLE_JWT = {
-    #'ACCESS_TOKEN_LIFETIME': timedelta(minutes=1),
     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=365),
     "ROTATE_REFRESH_TOKENS": False,
@@ -321,9 +353,5 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
-# it is needed in custome middlewere to get the user from the token
+
 JWT_ALGO = "HS256"
-
-
-DOMAIN_NAME = os.environ["DOMAIN_NAME"]
-SWAGGER_ROOT_URL = os.environ["SWAGGER_ROOT_URL"]

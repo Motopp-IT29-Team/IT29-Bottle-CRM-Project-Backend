@@ -290,7 +290,7 @@ class UsersListView(APIView, LimitOffsetPagination):
                     org=request.profile.org,
                 )
 
-            send_email_to_new_user(user.id)
+            send_email_to_new_user.delay(user.id)
 
         except Exception as e:
             return Response(

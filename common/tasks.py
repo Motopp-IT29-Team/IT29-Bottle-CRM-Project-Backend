@@ -17,45 +17,44 @@ app = Celery("redis://")
 
 @app.task
 def send_email_to_new_user(user_id):
-
     """Send Mail To Users When their account is created"""
+
     user_obj = User.objects.filter(id=user_id).first()
 
-    if user_obj:
-        context = {}
-        user_email = user_obj.email
-        context["url"] = settings.DOMAIN_NAME
-        context["uid"] = (urlsafe_base64_encode(force_bytes(user_obj.pk)),)
-        context["token"] = account_activation_token.make_token(user_obj)
-        time_delta_two_hours = datetime.datetime.strftime(
-            timezone.now() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
-        )
-        # creating an activation token and saving it in user model
-        activation_key = context["token"] + time_delta_two_hours
-        user_obj.activation_key = activation_key
-        user_obj.save()
+    if not user_obj:
+        return
 
-        context["complete_url"] = context[
-            "url"
-        ] + "/auth/activate-user/{}/{}/{}/".format(
-            context["uid"][0],
-            context["token"],
-            activation_key,
-        )
-        recipients = [
-            user_email,
-        ]
-        subject = "Welcome to Bottle CRM"
-        html_content = render_to_string("user_status_in.html", context=context)
+    context = {}
+    context["url"] = settings.DOMAIN_NAME
+    context["uid"] = urlsafe_base64_encode(force_bytes(user_obj.pk))
+    context["token"] = account_activation_token.make_token(user_obj)
 
-        msg = EmailMessage(
-            subject,
-            html_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=recipients,
-        )
-        msg.content_subtype = "html"
-        msg.send()
+    time_delta_two_hours = datetime.datetime.strftime(
+        datetime.datetime.utcnow() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
+    )
+
+    activation_key = context["token"] + time_delta_two_hours
+    user_obj.activation_key = activation_key
+    user_obj.save()
+
+    context["complete_url"] = "{}/auth/activate-user/{}/{}/{}/".format(
+        context["url"],
+        context["uid"],
+        context["token"],
+        activation_key,
+    )
+
+    subject = "Welcome to Bottle CRM"
+    html_content = render_to_string("user_status_in.html", context=context)
+
+    msg = EmailMessage(
+        subject,
+        html_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user_obj.email],
+    )
+    msg.content_subtype = "html"
+    msg.send()
 
 
 @app.task
