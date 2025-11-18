@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
+import dj_database_url
 
 # ==============================
 # Load the .env environment file
@@ -16,7 +17,7 @@ load_dotenv(BASE_DIR / ".env")
 # ==============================
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 DEBUG = os.environ.get("DEBUG", "True") == "True"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
 # ==============================
 # Installed applications
@@ -106,32 +107,41 @@ TEMPLATES = [
 WSGI_APPLICATION = "crm.wsgi.application"
 
 # ==============================
-# Database (Postgres or SQLite)
+# Database - supports both DATABASE_URL and individual DB settings
 # ==============================
-DB_NAME = os.environ.get("DBNAME")
-DB_USER = os.environ.get("DBUSER")
-DB_PASSWORD = os.environ.get("DBPASSWORD")
-DB_HOST = os.environ.get("DBHOST", "localhost")
-DB_PORT = os.environ.get("DBPORT", "5432")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-if DB_NAME and DB_USER and DB_PASSWORD:
+if DATABASE_URL:
+    # Production: use DATABASE_URL (Render, Railway, etc.)
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": DB_NAME,
-            "USER": DB_USER,
-            "PASSWORD": DB_PASSWORD,
-            "HOST": DB_HOST,
-            "PORT": DB_PORT,
-        }
+        "default": dj_database_url.parse(DATABASE_URL)
     }
 else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+    # Local: try individual DB settings or fallback to SQLite
+    DB_NAME = os.environ.get("DBNAME")
+    DB_USER = os.environ.get("DBUSER")
+    DB_PASSWORD = os.environ.get("DBPASSWORD")
+    DB_HOST = os.environ.get("DBHOST", "localhost")
+    DB_PORT = os.environ.get("DBPORT", "5432")
+
+    if DB_NAME and DB_USER and DB_PASSWORD:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": DB_NAME,
+                "USER": DB_USER,
+                "PASSWORD": DB_PASSWORD,
+                "HOST": DB_HOST,
+                "PORT": DB_PORT,
+            }
         }
-    }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "db.sqlite3",
+            }
+        }
 
 # ==============================
 # Password validation
@@ -151,19 +161,24 @@ USE_I18N = True
 USE_TZ = True
 
 # ==============================
-# Email and user settings
+# Email settings
 # ==============================
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-AUTH_USER_MODEL = "common.User"
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip("'\"")  # Remove quotes
 
-if DEBUG:
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@localhost")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@localhost")
+
+# Fix SSL certificate issue on macOS for local development
+if DEBUG and os.environ.get("ENV_TYPE", "dev") == "dev":
     import certifi
     os.environ['SSL_CERT_FILE'] = certifi.where()
+
+AUTH_USER_MODEL = "common.User"
 
 # ==============================
 # Static files
@@ -171,9 +186,10 @@ if DEBUG:
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # ==============================
-# Runtime environment
+# Media files
 # ==============================
 ENV_TYPE = os.environ.get("ENV_TYPE", "dev")
 print(">>> ENV_TYPE:", ENV_TYPE)
@@ -182,16 +198,16 @@ if ENV_TYPE == "dev":
     MEDIA_ROOT = os.path.join(BASE_DIR, "media")
     MEDIA_URL = "/media/"
 elif ENV_TYPE == "prod":
-    from .server_settings import *
-
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "dev@example.com")
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+    try:
+        from .server_settings import *
+    except ImportError:
+        pass
 
 # ==============================
-# Celery settings (locally without Redis)
+# Celery settings
 # ==============================
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
 # ==============================
 # Logging settings
@@ -199,6 +215,14 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+    },
     "formatters": {
         "django.server": {
             "()": "django.utils.log.ServerFormatter",
@@ -206,12 +230,45 @@ LOGGING = {
         }
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "level": "INFO"},
-        "logfile": {"class": "logging.FileHandler", "filename": "server.log"},
+        "console": {
+            "level": "INFO",
+            "filters": ["require_debug_true"],
+            "class": "logging.StreamHandler",
+        },
+        "console_debug_false": {
+            "level": "ERROR",
+            "filters": ["require_debug_false"],
+            "class": "logging.StreamHandler",
+        },
+        "django.server": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "django.server",
+        },
+        "mail_admins": {
+            "level": "ERROR",
+            "filters": ["require_debug_false"],
+            "class": "django.utils.log.AdminEmailHandler",
+        },
+        "logfile": {
+            "class": "logging.FileHandler",
+            "filename": "server.log",
+        },
     },
     "loggers": {
-        "django": {"handlers": ["console", "logfile"], "level": "INFO"},
-        "django.server": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "django": {
+            "handlers": [
+                "console",
+                "console_debug_false",
+                "logfile",
+            ],
+            "level": "INFO",
+        },
+        "django.server": {
+            "handlers": ["django.server"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
 
@@ -271,13 +328,12 @@ SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # ==============================
-# Additional variables
+# Domain settings
 # ==============================
-DOMAIN_NAME = os.environ.get("DOMAIN_NAME", "localhost")
-SWAGGER_ROOT_URL = os.environ.get("SWAGGER_ROOT_URL", "http://127.0.0.1:8000/swagger/")
+DOMAIN_NAME = os.environ.get("DOMAIN_NAME", "http://localhost:3000")
+SWAGGER_ROOT_URL = os.environ.get("SWAGGER_ROOT_URL", "http://localhost:8000")
 
 # ==============================
 # JWT settings
@@ -290,6 +346,9 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": False,
     "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,
+    "VERIFYING_KEY": None,
+    "AUDIENCE": None,
+    "ISSUER": None,
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
