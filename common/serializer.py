@@ -109,18 +109,12 @@ class ShowOrganizationListSerializer(serializers.ModelSerializer):
 
 
 class BillingAddressSerializer(serializers.ModelSerializer):
-    country = serializers.SerializerMethodField()
-
-    def get_country(self, obj):
-        return obj.get_country_display()
-
     class Meta:
         model = Address
         fields = ("address_line", "street", "city", "state", "postcode", "country")
 
     def __init__(self, *args, **kwargs):
         account_view = kwargs.pop("account", False)
-
         super().__init__(*args, **kwargs)
 
         if account_view:
@@ -201,25 +195,45 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id","email","profile_pic"]
+        fields = ["id", "email", "profile_pic", "is_active"]
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    # address = BillingAddressSerializer()
+    user_details = UserSerializer(source='user', read_only=True)
+    address = BillingAddressSerializer(read_only=True)
+
+    # ДОДАНО - поля для audit log
+    created_by_email = serializers.CharField(
+        source='created_by.email',
+        read_only=True,
+        allow_null=True
+    )
+    updated_by_email = serializers.CharField(
+        source='updated_by.email',
+        read_only=True,
+        allow_null=True
+    )
+    deactivated_by_email = serializers.CharField(
+        source='deactivated_by.email',
+        read_only=True,
+        allow_null=True
+    )
 
     class Meta:
         model = Profile
-        fields = (
-            "id",
-            "user_details",
-            "role",
-            "address",
-            "has_marketing_access",
-            "has_sales_access",
-            "phone",
-            "date_of_joining",
-            "is_active",
-        )
+        fields = [
+            'id',
+            'role',
+            'user_details',
+            'address',
+            'date_of_joining',
+            'created_by_email',
+            'created_at',
+            'updated_by_email',
+            'updated_at',
+            'deactivated_by_email',
+            'deactivated_at',
+        ]
 
 
 class AttachmentsSerializer(serializers.ModelSerializer):

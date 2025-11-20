@@ -72,10 +72,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from common.serializer import EmailTokenObtainPairSerializer
+from common.models import Document
+from common.models import Attachments
+from common.models import APISettings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class GetTeamsAndUsersView(APIView):
-
     permission_classes = (IsAuthenticated,)
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
@@ -204,7 +207,6 @@ class ActivateUserView(APIView):
             user.activation_key = None
             user.save()
 
-            from rest_framework_simplejwt.tokens import RefreshToken
             refresh = RefreshToken.for_user(user)
 
             return Response(
@@ -288,6 +290,7 @@ class UsersListView(APIView, LimitOffsetPagination):
                     role=params.get("role"),
                     address=address_obj,
                     org=request.profile.org,
+                    created_by=request.user,
                 )
 
             send_email_to_new_user(user.id)
@@ -303,7 +306,6 @@ class UsersListView(APIView, LimitOffsetPagination):
             status=status.HTTP_201_CREATED,
         )
 
-
     @extend_schema(parameters=swagger_params1.user_list_params)
     def get(self, request, format=None):
         if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
@@ -311,58 +313,29 @@ class UsersListView(APIView, LimitOffsetPagination):
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
         queryset = Profile.objects.filter(org=request.profile.org).order_by("-id")
         params = request.query_params
-        if params:
-            if params.get("email"):
-                queryset = queryset.filter(user__email__icontains=params.get("email"))
-            if params.get("role"):
-                queryset = queryset.filter(role=params.get("role"))
-            if params.get("status"):
-                queryset = queryset.filter(is_active=params.get("status"))
+        status_param = params.get("status", "active")
 
-        context = {}
-        queryset_active_users = queryset.filter(is_active=True)
-        results_active_users = self.paginate_queryset(
-            queryset_active_users.distinct(), self.request, view=self
-        )
-        active_users = ProfileSerializer(results_active_users, many=True).data
-        if results_active_users:
-            offset = queryset_active_users.filter(
-                id__gte=results_active_users[-1].id
-            ).count()
-            if offset == queryset_active_users.count():
-                offset = None
-        else:
-            offset = 0
-        context["active_users"] = {
-            "active_users_count": self.count,
-            "active_users": active_users,
-            "offset": offset,
+        if params.get("email"):
+            queryset = queryset.filter(user__email__icontains=params.get("email"))
+        if params.get("role"):
+            queryset = queryset.filter(role=params.get("role"))
+
+        is_active = status_param == "active"
+        queryset = queryset.filter(user__is_active=is_active)
+
+        total_count = queryset.count()
+        results = self.paginate_queryset(queryset.distinct(), self.request, view=self)
+        users = ProfileSerializer(results, many=True).data
+
+        context = {
+            "users": users,
+            "total_count": total_count,
+            "status": status_param,
         }
 
-        queryset_inactive_users = queryset.filter(is_active=False)
-        results_inactive_users = self.paginate_queryset(
-            queryset_inactive_users.distinct(), self.request, view=self
-        )
-        inactive_users = ProfileSerializer(results_inactive_users, many=True).data
-        if results_inactive_users:
-            offset = queryset_inactive_users.filter(
-                id__gte=results_inactive_users[-1].id
-            ).count()
-            if offset == queryset_inactive_users.count():
-                offset = None
-        else:
-            offset = 0
-        context["inactive_users"] = {
-            "inactive_users_count": self.count,
-            "inactive_users": inactive_users,
-            "offset": offset,
-        }
-
-        context["admin_email"] = settings.ADMIN_EMAIL
-        context["roles"] = ROLES
-        context["status"] = [("True", "Active"), ("False", "In Active")]
         return Response(context)
 
 
@@ -412,15 +385,20 @@ class UserDetailView(APIView):
             status=status.HTTP_200_OK,
         )
 
-    @extend_schema(tags=["users"],parameters=swagger_params1.organization_params, request=UserCreateSwaggerSerializer)
+    @extend_schema(
+        tags=["users"],
+        parameters=swagger_params1.organization_params,
+        request=UserCreateSwaggerSerializer
+    )
     def put(self, request, pk, format=None):
         params = request.data
         profile = self.get_object(pk)
         address_obj = profile.address
+
         if (
-            self.request.profile.role != "ADMIN"
-            and not self.request.user.is_superuser
-            and self.request.profile.id != profile.id
+                self.request.profile.role != "ADMIN"
+                and not self.request.user.is_superuser
+                and self.request.profile.id != profile.id
         ):
             return Response(
                 {"error": True, "errors": "Permission Denied"},
@@ -432,11 +410,13 @@ class UserDetailView(APIView):
                 {"error": True, "errors": "User company doesnot match with header...."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
         serializer = CreateUserSerializer(
             data=params, instance=profile.user, org=request.profile.org
         )
         address_serializer = BillingAddressSerializer(data=params, instance=address_obj)
         profile_serializer = CreateProfileSerializer(data=params, instance=profile)
+
         data = {}
         if not serializer.is_valid():
             data["contact_errors"] = serializer.errors
@@ -444,30 +424,38 @@ class UserDetailView(APIView):
             data["address_errors"] = (address_serializer.errors,)
         if not profile_serializer.is_valid():
             data["profile_errors"] = (profile_serializer.errors,)
+
         if data:
             data["error"] = True
             return Response(
                 data,
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         if address_serializer.is_valid():
             address_obj = address_serializer.save()
             user = serializer.save()
             user.email = user.email
             user.save()
+
         if profile_serializer.is_valid():
             profile = profile_serializer.save()
+            profile.updated_by = request.user
+            profile.save()
+
             return Response(
                 {"error": False, "message": "User Updated Successfully"},
                 status=status.HTTP_200_OK,
             )
+
         return Response(
             {"error": True, "errors": serializer.errors},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     @extend_schema(
-        tags=["users"],parameters=swagger_params1.organization_params
+        tags=["users"],
+        parameters=swagger_params1.organization_params
     )
     def delete(self, request, pk, format=None):
         if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
@@ -475,19 +463,90 @@ class UserDetailView(APIView):
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        self.object = self.get_object(pk)
-        if self.object.id == request.profile.id:
+
+        profile = self.get_object(pk)
+
+        if profile.id == request.profile.id:
+            return Response(
+                {"error": True, "errors": "Cannot delete your own account"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user_email = profile.user.email
+        deleted_by = request.profile.user.email
+        user = profile.user
+
+        Attachments.objects.filter(created_by=user).delete()
+        Document.objects.filter(created_by=profile).delete()
+        APISettings.objects.filter(created_by=profile).delete()
+
+        user.delete()
+
+        send_email_user_delete.delay(
+            user_email,
+            deleted_by=deleted_by,
+        )
+
+        return Response(
+            {
+                "error": False,
+                "message": "User and all associated data deleted successfully"
+            },
+            status=status.HTTP_200_OK
+        )
+
+class ResendInvitationView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["users"],
+        parameters=swagger_params1.organization_params
+    )
+    def post(self, request, pk, format=None):
+        """Resend activation invitation to inactive user"""
+
+        if request.profile.role != "ADMIN" and not request.profile.is_admin:
             return Response(
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        deleted_by = self.request.profile.user.email
-        send_email_user_delete.delay(
-            self.object.user.email,
-            deleted_by=deleted_by,
-        )
-        self.object.delete()
-        return Response({"status": "success"}, status=status.HTTP_200_OK)
+
+        try:
+            profile = get_object_or_404(Profile, pk=pk)
+            user = profile.user
+
+            if profile.org != request.profile.org:
+                return Response(
+                    {"error": True, "errors": "User company does not match"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if user.is_active:
+                return Response(
+                    {"error": True, "message": "User is already active"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            resend_activation_link_to_user(user.email)
+
+            return Response(
+                {
+                    "error": False,
+                    "message": "Invitation sent successfully"
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Profile.DoesNotExist:
+            return Response(
+                {"error": True, "message": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": True, "message": "Failed to send invitation"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 # check_header not working
@@ -888,42 +947,45 @@ class UserStatusView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @extend_schema(
-        description="User Status View",parameters=swagger_params1.organization_params, request=UserUpdateStatusSwaggerSerializer
+        tags=["users"],
+        parameters=swagger_params1.organization_params
     )
     def post(self, request, pk, format=None):
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
+        if request.profile.role != "ADMIN" and not request.user.is_superuser:
             return Response(
-                {
-                    "error": True,
-                    "errors": "You do not have permission to perform this action",
-                },
+                {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        params = request.data
-        profiles = Profile.objects.filter(org=request.profile.org)
-        profile = profiles.get(id=pk)
 
-        if params.get("status"):
-            user_status = params.get("status")
-            if user_status == "Active":
-                profile.is_active = True
-            elif user_status == "Inactive":
-                profile.is_active = False
+        try:
+            profile = Profile.objects.get(id=pk, org=request.profile.org)
+            user = profile.user
+
+            user.is_active = not user.is_active
+            user.save()
+
+            if not user.is_active:
+                profile.deactivated_by = request.user
+                profile.deactivated_at = timezone.now()
             else:
-                return Response(
-                    {"error": True, "errors": "Please enter Valid Status for user"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                profile.deactivated_by = None
+                profile.deactivated_at = None
+
             profile.save()
 
-        context = {}
-        active_profiles = profiles.filter(is_active=True)
-        inactive_profiles = profiles.filter(is_active=False)
-        context["active_profiles"] = ProfileSerializer(active_profiles, many=True).data
-        context["inactive_profiles"] = ProfileSerializer(
-            inactive_profiles, many=True
-        ).data
-        return Response(context)
+            return Response(
+                {
+                    "error": False,
+                    "message": f"User {'activated' if user.is_active else 'deactivated'} successfully"
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Profile.DoesNotExist:
+            return Response(
+                {"error": True, "errors": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 class DomainList(APIView):

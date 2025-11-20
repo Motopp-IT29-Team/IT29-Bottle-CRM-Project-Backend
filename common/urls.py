@@ -3,7 +3,7 @@ from rest_framework_simplejwt import views as jwt_views
 
 from common import views
 from django.urls import path
-from common.views import  EmailLoginView
+from common.views import EmailLoginView
 
 app_name = "api_common"
 
@@ -27,6 +27,7 @@ urlpatterns = [
     path("users/get-teams-and-users/", views.GetTeamsAndUsersView.as_view()),
     path("users/", views.UsersListView.as_view()),
     path("user/<str:pk>/", views.UserDetailView.as_view()),
+    path("user/<str:pk>/resend-invitation/", views.ResendInvitationView.as_view()),
     path("documents/", views.DocumentListView.as_view()),
     path("documents/<str:pk>/", views.DocumentDetailView.as_view()),
     path("api-settings/", views.DomainList.as_view()),
