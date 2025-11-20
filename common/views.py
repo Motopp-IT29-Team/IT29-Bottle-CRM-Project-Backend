@@ -76,7 +76,8 @@ from common.models import Document
 from common.models import Attachments
 from common.models import APISettings
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from rest_framework.permissions import IsAuthenticated
+from common.permissions import IsOrgAdmin
 
 class GetTeamsAndUsersView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -235,7 +236,7 @@ class ActivateUserView(APIView):
 
 
 class UsersListView(APIView, LimitOffsetPagination):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, IsOrgAdmin)
 
     @extend_schema(
         parameters=swagger_params1.organization_params,
@@ -340,7 +341,7 @@ class UsersListView(APIView, LimitOffsetPagination):
 
 
 class UserDetailView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,IsOrgAdmin)
 
     def get_object(self, pk):
         profile = get_object_or_404(Profile, pk=pk)
@@ -944,7 +945,7 @@ class DocumentDetailView(APIView):
 
 
 class UserStatusView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,IsOrgAdmin)
 
     @extend_schema(
         tags=["users"],
