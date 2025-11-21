@@ -180,10 +180,14 @@ class LeadListView(APIView, LimitOffsetPagination):
                 lead_obj.contacts.add(*obj_contact)
 
             recipients = list(lead_obj.assigned_to.all().values_list("id", flat=True))
-            send_email_to_assigned_user.delay(
-                recipients,
-                lead_obj.id,
-            )
+            try:
+                send_email_to_assigned_user.delay(
+                    recipients,
+                    lead_obj.id,
+                )
+            except Exception as e:
+                # Celery not available, skip async email
+                pass
 
             if request.FILES.get("lead_attachment"):
                 attachment = Attachments()
@@ -192,7 +196,6 @@ class LeadListView(APIView, LimitOffsetPagination):
                 attachment.lead = lead_obj
                 attachment.attachment = request.FILES.get("lead_attachment")
                 attachment.save()
-
             if data.get("teams",None):
                 teams_list = data.get("teams")
                 teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)

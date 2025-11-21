@@ -82,6 +82,7 @@ class LeadSerializer(serializers.ModelSerializer):
             "organization",
             "probability",
             "close_date",
+            "do_not_call",
         )
 
 
@@ -163,6 +164,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "organization",
             "probability",
             "close_date",
+            "do_not_call",
             # "lead_attachment",
         )
 
