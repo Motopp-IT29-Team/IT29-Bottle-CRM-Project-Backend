@@ -208,7 +208,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                 )
                 lead_obj.assigned_to.add(*profiles)
 
-            if data.get("status") == "converted":
+            if data.get("status") == "qualified":
                 account_object = Account.objects.create(
                     created_by=request.profile.user,
                     name=lead_obj.account_name,
@@ -489,7 +489,7 @@ class LeadDetailView(APIView):
                 )
                 lead_obj.assigned_to.add(*profiles)
 
-            if params.get("status") == "converted":
+            if params.get("status") == "qualified":
                 account_object = Account.objects.create(
                     created_by=request.profile.user,
                     name=lead_obj.account_name,

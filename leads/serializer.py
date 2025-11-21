@@ -92,7 +92,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         request_obj = kwargs.pop("request_obj", None)
         super().__init__(*args, **kwargs)
-        if self.initial_data and self.initial_data.get("status") == "converted":
+        if self.initial_data and self.initial_data.get("status") == "qualified":
             self.fields["account_name"].required = True
             self.fields["email"].required = True
         self.fields["first_name"].required = False
