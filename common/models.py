@@ -185,15 +185,13 @@ class Org(BaseModel):
 #         super().save(*args, **kwargs)
 
 
-
-
 class Profile(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     org = models.ForeignKey(
         Org, null=True, on_delete=models.CASCADE, blank=True, related_name="user_org"
     )
     phone = PhoneNumberField(null=True, blank=True, unique=True)
-    alternate_phone = PhoneNumberField(null=True,blank=True)
+    alternate_phone = PhoneNumberField(null=True, blank=True)
     address = models.ForeignKey(
         Address,
         related_name="adress_users",
@@ -207,6 +205,31 @@ class Profile(BaseModel):
     is_active = models.BooleanField(default=True)
     is_organization_admin = models.BooleanField(default=False)
     date_of_joining = models.DateField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        User,
+        related_name='created_profiles',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    updated_by = models.ForeignKey(
+        User,
+        related_name='updated_profiles',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    deactivated_by = models.ForeignKey(
+        User,
+        related_name='deactivated_profiles',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    deactivated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Profile"
@@ -224,11 +247,11 @@ class Profile(BaseModel):
 
     @property
     def user_details(self):
-        return  {
-            'email' : self.user.email,
-            'id' :  self.user.id,
-            'is_active' : self.user.is_active,
-            'profile_pic' : self.user.profile_pic
+        return {
+            'email': self.user.email,
+            'id': self.user.id,
+            'is_active': self.user.is_active,
+            'profile_pic': self.user.profile_pic
         }
 
 

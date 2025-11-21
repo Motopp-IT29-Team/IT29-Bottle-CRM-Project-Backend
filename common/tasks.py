@@ -65,7 +65,6 @@ def send_email_to_new_user(user_id):
         print(f"✅ Email sent to {user_obj.email} (status: {response.status_code})")
     except Exception as e:
         print(f"❌ Email failed: {str(e)}")
-        # Don't raise exception - let user creation succeed
 
 
 @app.task
@@ -203,53 +202,58 @@ def send_email_user_delete(
 
 
 @app.task
-def resend_activation_link_to_user(
-    user_email="",
-):
-    """Send Mail To Users When their account is created"""
+def resend_activation_link_to_user(user_email=""):
+    """Resend activation link to user"""
 
     user_obj = User.objects.filter(email=user_email).first()
+
+    if not user_obj:
+        print(f"❌ User {user_email} not found")
+        return
+
+    print(f"🔄 Resending activation for {user_email}")
+
     user_obj.is_active = False
     user_obj.save()
-    if user_obj:
-        context = {}
-        context["user_email"] = user_email
-        context["url"] = settings.DOMAIN_NAME
-        context["uid"] = (urlsafe_base64_encode(force_bytes(user_obj.pk)),)
-        context["token"] = account_activation_token.make_token(user_obj)
-        time_delta_two_hours = datetime.datetime.strftime(
-            timezone.now() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
-        )
-        context["token"] = context["token"]
-        activation_key = context["token"] + time_delta_two_hours
-        # Profile.objects.filter(user=user_obj).update(
-        #     activation_key=activation_key,
-        #     key_expires=timezone.now() + datetime.timedelta(hours=2),
-        # )
-        user_obj.activation_key = activation_key
-        user_obj.key_expires = timezone.now() + datetime.timedelta(hours=2)
-        user_obj.save()
 
-        context["complete_url"] = context[
-            "url"
-        ] + "/auth/activate_user/{}/{}/{}/".format(
-            context["uid"][0],
-            context["token"],
-            activation_key,
+    context = {}
+    context["url"] = settings.DOMAIN_NAME
+    context["uid"] = urlsafe_base64_encode(force_bytes(user_obj.pk))
+    context["token"] = account_activation_token.make_token(user_obj)
+
+    time_delta_two_hours = datetime.datetime.strftime(
+        datetime.datetime.utcnow() + datetime.timedelta(hours=2), "%Y-%m-%d-%H-%M-%S"
+    )
+
+    activation_key = context["token"] + time_delta_two_hours
+
+    user_obj.activation_key = activation_key
+    user_obj.key_expires = timezone.now() + datetime.timedelta(hours=2)
+    user_obj.save()
+
+    context["complete_url"] = "{}/auth/activate-user/{}/{}/{}/".format(
+        context["url"],
+        context["uid"],
+        context["token"],
+        activation_key,
+    )
+
+    subject = "Welcome to Bottle CRM - Activation Link"
+    html_content = render_to_string("user_status_in.html", context=context)
+
+    try:
+        message = Mail(
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to_emails=user_obj.email,
+            subject=subject,
+            html_content=html_content
         )
-        recipients = [context["complete_url"]]
-        recipients.append(user_email)
-        subject = "Welcome to Bottle CRM"
-        html_content = render_to_string("user_status_in.html", context=context)
-        if recipients:
-            msg = EmailMessage(
-                subject,
-                html_content,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=recipients,
-            )
-            msg.content_subtype = "html"
-            msg.send()
+
+        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+        response = sg.send(message)
+        print(f"✅ Resend email sent to {user_obj.email} (status: {response.status_code})")
+    except Exception as e:
+        print(f"❌ Resend email failed: {str(e)}")
 
 
 @app.task
