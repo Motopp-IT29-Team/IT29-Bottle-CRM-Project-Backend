@@ -45,9 +45,10 @@ class LeadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Lead
-        # fields = ‘__all__’
+        # fields = '__all__'
         fields = (
             "id",
+            "salutation",
             "title",
             "first_name",
             "last_name",
@@ -142,6 +143,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "account_name",
+            "salutation",
             "title",
             "phone",
             "email",

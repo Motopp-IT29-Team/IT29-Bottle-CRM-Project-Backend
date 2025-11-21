@@ -10,6 +10,7 @@ from common.base import BaseModel
 from common.utils import (
     COUNTRIES,
     INDCHOICES,
+    LEAD_SALUTATION,
     LEAD_SOURCE,
     LEAD_STATUS,
     return_complete_address,
@@ -32,6 +33,9 @@ class Company(BaseModel):
         return f"{self.name}"
 
 class Lead(BaseModel):
+    salutation = models.CharField(
+        _("Salutation"), max_length=10, choices=LEAD_SALUTATION, blank=True, null=True
+    )
     title = models.CharField(
         pgettext_lazy("Treatment Pronouns for the customer", "Title"), max_length=64
     )

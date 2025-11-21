@@ -70,6 +70,14 @@ ROLES = (
     ("USER", "USER"),
 )
 
+LEAD_SALUTATION = (
+    ("mr", "Mr"),
+    ("ms", "Ms"),
+    ("mrs", "Mrs"),
+    ("dr", "Dr"),
+    ("prof", "Prof"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),
