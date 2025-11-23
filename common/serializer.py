@@ -128,6 +128,7 @@ class BillingAddressSerializer(serializers.ModelSerializer):
 
 class CreateUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+
     class Meta:
         model = User
         fields = (
@@ -173,9 +174,14 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
 
 class CreateProfileSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(required=True, max_length=150)
+    last_name = serializers.CharField(required=True, max_length=150)
+
     class Meta:
         model = Profile
         fields = (
+            "first_name",
+            "last_name",
             "role",
             "phone",
             "alternate_phone",
@@ -188,11 +194,21 @@ class CreateProfileSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         self.fields["alternate_phone"].required = False
         self.fields["role"].required = True
-        # self.fields["phone"].required = False
+        self.fields["first_name"].required = True
+        self.fields["last_name"].required = True
+
+    def validate_first_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("First name is required")
+        return value.strip()
+
+    def validate_last_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Last name is required")
+        return value.strip()
 
 
 class UserSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = User
         fields = ["id", "email", "profile_pic", "is_active"]
@@ -202,7 +218,6 @@ class ProfileSerializer(serializers.ModelSerializer):
     user_details = UserSerializer(source='user', read_only=True)
     address = BillingAddressSerializer(read_only=True)
 
-    # ДОДАНО - поля для audit log
     created_by_email = serializers.CharField(
         source='created_by.email',
         read_only=True,
@@ -223,6 +238,8 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id',
+            'first_name',
+            'last_name',
             'role',
             'user_details',
             'address',

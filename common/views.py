@@ -285,8 +285,11 @@ class UsersListView(APIView, LimitOffsetPagination):
                 user.set_password(password)
                 user.save()
 
+                # Create profile with first_name and last_name
                 Profile.objects.create(
                     user=user,
+                    first_name=params.get("first_name", ""),
+                    last_name=params.get("last_name", ""),
                     date_of_joining=timezone.now(),
                     role=params.get("role"),
                     address=address_obj,
@@ -440,9 +443,9 @@ class UserDetailView(APIView):
             user.save()
 
         if profile_serializer.is_valid():
-            profile = profile_serializer.save()
-            profile.updated_by = request.user
-            profile.save()
+            profile_obj = profile_serializer.save()
+            profile_obj.updated_by = request.user
+            profile_obj.save()
 
             return Response(
                 {"error": False, "message": "User Updated Successfully"},
@@ -593,7 +596,6 @@ class ApiHomeView(APIView):
 
 
 class OrgProfileCreateView(APIView):
-    #authentication_classes = (CustomDualAuthentication,)
     permission_classes = (IsAuthenticated,)
 
     model1 = Org
@@ -609,15 +611,40 @@ class OrgProfileCreateView(APIView):
         data = request.data
         data['api_key'] = secrets.token_hex(16)
         serializer = self.serializer_class(data=data)
+
         if serializer.is_valid():
             org_obj = serializer.save()
 
-            # now creating the profile
-            profile_obj = self.model2.objects.create(user=request.user, org=org_obj)
-            # now the current user is the admin of the newly created organisation
-            profile_obj.is_organization_admin = True
-            profile_obj.role = 'ADMIN'
-            profile_obj.save()
+            # Check if profile already exists for this org
+            existing_profile = self.model2.objects.filter(user=request.user, org=org_obj).first()
+
+            if existing_profile:
+                # Update existing profile
+                profile_obj = existing_profile
+                profile_obj.is_organization_admin = True
+                profile_obj.role = 'ADMIN'
+                profile_obj.save()
+            else:
+                # Create new profile with names from User model or request data
+                first_name = data.get('first_name') or request.user.first_name or ''
+                last_name = data.get('last_name') or request.user.last_name or ''
+
+                # If still empty, try to get from existing profile
+                if not first_name or not last_name:
+                    existing_user_profile = self.model2.objects.filter(user=request.user).first()
+                    if existing_user_profile:
+                        first_name = first_name or existing_user_profile.first_name
+                        last_name = last_name or existing_user_profile.last_name
+
+                profile_obj = self.model2.objects.create(
+                    user=request.user,
+                    org=org_obj,
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_joining=timezone.now().date(),
+                    is_organization_admin=True,
+                    role='ADMIN'
+                )
 
             return Response(
                 {
@@ -1099,44 +1126,60 @@ class DomainDetailView(APIView):
             status=status.HTTP_200_OK,
         )
 
-class GoogleLoginView(APIView):
-    """
-    Check for authentication with google
-    post:
-        Returns token of logged In user
-    """
 
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
 
     @extend_schema(
-        description="Login through Google",  request=SocialLoginSerializer,
+        description="Login through Google", request=SocialLoginSerializer,
     )
     def post(self, request):
-        payload = {'access_token': request.data.get("token")}  # validate the token
+        payload = {'access_token': request.data.get("token")}
         r = requests.get('https://www.googleapis.com/oauth2/v2/userinfo', params=payload)
         data = json.loads(r.text)
-        print(data)
+
         if 'error' in data:
             content = {'message': 'wrong google token / this google token is already expired.'}
             return Response(content)
-        # create user if not exist
-        try:
-            user = User.objects.get(email=data['email'])
-        except User.DoesNotExist:
-            user = User()
-            user.email = data['email']
-            user.profile_pic = data['picture']
-            # provider random default password
-            # user.password = make_password(BaseUserManager().make_random_password())
+
+        # Get or create user
+        user, user_created = User.objects.get_or_create(
+            email=data['email'],
+            defaults={
+                'profile_pic': data.get('picture', ''),
+                'first_name': data.get('given_name', ''),
+                'last_name': data.get('family_name', ''),
+            }
+        )
+
+        if user_created:
             user.set_unusable_password()
-            user.email = data['email']
             user.save()
-        token = RefreshToken.for_user(user)  # generate token without username & password
+        else:
+            if not user.first_name and data.get('given_name'):
+                user.first_name = data.get('given_name', '')
+            if not user.last_name and data.get('family_name'):
+                user.last_name = data.get('family_name', '')
+            user.save()
+
+        existing_profiles = Profile.objects.filter(user=user)
+        if existing_profiles.exists():
+            for profile in existing_profiles:
+                if not profile.first_name:
+                    profile.first_name = user.first_name
+                if not profile.last_name:
+                    profile.last_name = user.last_name
+                profile.save()
+
+        token = RefreshToken.for_user(user)
         response = {}
         response['username'] = user.email
         response['access_token'] = str(token.access_token)
         response['refresh_token'] = str(token)
         response['user_id'] = user.id
+
         return Response(response)
+
 
 class EmailLoginView(TokenObtainPairView):
     """

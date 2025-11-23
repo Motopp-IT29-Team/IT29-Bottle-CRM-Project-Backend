@@ -1,7 +1,7 @@
 import jwt
 from django.conf import settings
 from django.contrib.auth import logout
-from django.core.exceptions import ValidationError,PermissionDenied
+from django.core.exceptions import ValidationError, PermissionDenied
 from rest_framework import status
 from rest_framework.response import Response
 from crum import get_current_user
@@ -9,31 +9,22 @@ from django.utils.functional import SimpleLazyObject
 
 from common.models import Org, Profile, User
 
+# URLs that don't require authentication or org
+EXEMPT_URLS = [
+    '/api/auth/login/',
+    '/api/auth/google/',
+    '/api/auth/register/',
+    '/api/auth/activate-user/',
+    '/api/org/',
+    '/admin/',
+]
 
-# def set_profile_request(request, org, token):
-#     # we are decoding the token
-#     decoded = jwt.decode(token, (settings.SECRET_KEY), algorithms=[settings.JWT_ALGO])
-
-#     request.user = User.objects.get(id=decoded["user_id"])
-
-#     if request.user:
-#         request.profile = Profile.objects.get(
-#             user=request.user, org=org, is_active=True
-#         )
-#         request.profile.role = "ADMIN"
-#         request.profile.save()
-#         if request.profile is None:
-#             logout(request)
-#             return Response(
-#                 {"error": False},
-#                 status=status.HTTP_200_OK,
-            # )
 
 def get_actual_value(request):
     if request.user is None:
         return None
+    return request.user
 
-    return request.user #here should have value, so any code using request.user will work
 
 class GetProfileAndOrg(object):
     def __init__(self, get_response):
@@ -44,14 +35,17 @@ class GetProfileAndOrg(object):
         return self.get_response(request)
 
     def process_request(self, request):
-        if '/api/auth/activate-user/' in request.path:
-            request.profile = None
-            return
+        # Skip middleware for exempt URLs
+        for exempt_url in EXEMPT_URLS:
+            if request.path.startswith(exempt_url):
+                request.profile = None
+                return
 
-        try :
+        try:
             request.profile = None
             user_id = None
-            # here I am getting the the jwt token passing in header
+
+            # Get JWT token from Authorization header
             if request.headers.get("Authorization"):
                 token1 = request.headers.get("Authorization")
                 if " " in token1:
@@ -60,7 +54,9 @@ class GetProfileAndOrg(object):
                     token = token1
                 decoded = jwt.decode(token, (settings.SECRET_KEY), algorithms=[settings.JWT_ALGO])
                 user_id = decoded['user_id']
-            api_key = request.headers.get('Token')  # Get API key from request query params
+
+            # Get API key from Token header
+            api_key = request.headers.get('Token')
             if api_key:
                 try:
                     organization = Org.objects.get(api_key=api_key)
@@ -69,14 +65,15 @@ class GetProfileAndOrg(object):
                     profile = Profile.objects.filter(org=api_key_user, role="ADMIN").first()
                     user_id = profile.user.id
                 except Org.DoesNotExist:
-                    raise AuthenticationFailed('Invalid API Key')
+                    raise PermissionDenied('Invalid API Key')
+
             if user_id is not None:
-                if request.headers.get("org"):
+                org_header = request.headers.get("org")
+                if org_header and org_header != "null" and org_header != "None":
                     profile = Profile.objects.get(
-                        user_id=user_id, org=request.headers.get("org"), is_active=True
+                        user_id=user_id, org=org_header, is_active=True
                     )
                     if profile:
                         request.profile = profile
-        except :
-             print('test1')
-             raise PermissionDenied()
+        except:
+            raise PermissionDenied()
