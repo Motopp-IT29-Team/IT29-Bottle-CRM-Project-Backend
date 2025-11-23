@@ -101,6 +101,13 @@ LEAD_RATING = (
     ("cold", "Cold"),
 )
 
+LEAD_BUDGET_RANGE = (
+    ("less_than_5000", "Less than €5,000"),
+    ("5000_to_10000", "€5,000–€10,000"),
+    ("10000_to_25000", "€10,000–€25,000"),
+    ("over_25000", "Over €25,000"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),

@@ -10,6 +10,7 @@ from common.base import BaseModel
 from common.utils import (
     COUNTRIES,
     INDCHOICES,
+    LEAD_BUDGET_RANGE,
     LEAD_DEPARTMENT,
     LEAD_LANGUAGE,
     LEAD_RATING,
@@ -54,6 +55,9 @@ class Lead(BaseModel):
     )
     rating = models.CharField(
         _("Rating"), max_length=10, choices=LEAD_RATING, default="warm", blank=True
+    )
+    budget_range = models.CharField(
+        _("Budget Range"), max_length=50, choices=LEAD_BUDGET_RANGE, blank=True, null=True
     )
     status = models.CharField(
         _("Status of Lead"), max_length=255, blank=True, null=True, choices=LEAD_STATUS
