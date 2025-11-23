@@ -35,6 +35,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(
         default=uuid.uuid4, unique=True, editable=False, db_index=True, primary_key=True
     )
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     email = models.EmailField(_("email address"), blank=True, unique=True)
     profile_pic = models.CharField(
         max_length=1000, null=True, blank=True
@@ -190,6 +192,12 @@ class Profile(BaseModel):
     org = models.ForeignKey(
         Org, null=True, on_delete=models.CASCADE, blank=True, related_name="user_org"
     )
+
+    # Personal Information
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
+
+    # Contact Information
     phone = PhoneNumberField(null=True, blank=True, unique=True)
     alternate_phone = PhoneNumberField(null=True, blank=True)
     address = models.ForeignKey(
@@ -199,6 +207,8 @@ class Profile(BaseModel):
         blank=True,
         null=True,
     )
+
+    # Role & Permissions
     role = models.CharField(max_length=50, choices=ROLES, default="USER")
     has_sales_access = models.BooleanField(default=False)
     has_marketing_access = models.BooleanField(default=False)
@@ -206,6 +216,7 @@ class Profile(BaseModel):
     is_organization_admin = models.BooleanField(default=False)
     date_of_joining = models.DateField(null=True, blank=True)
 
+    # Audit Fields
     created_by = models.ForeignKey(
         User,
         related_name='created_profiles',
@@ -246,12 +257,20 @@ class Profile(BaseModel):
         return self.is_organization_admin
 
     @property
+    def full_name(self):
+        """Return full name of the user"""
+        return f"{self.first_name} {self.last_name}".strip() or self.user.email
+
+    @property
     def user_details(self):
         return {
             'email': self.user.email,
             'id': self.user.id,
             'is_active': self.user.is_active,
-            'profile_pic': self.user.profile_pic
+            'profile_pic': self.user.profile_pic,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'full_name': self.full_name,
         }
 
 
