@@ -95,6 +95,12 @@ LEAD_LANGUAGE = (
     ("spanish", "Spanish"),
 )
 
+LEAD_RATING = (
+    ("hot", "Hot"),
+    ("warm", "Warm"),
+    ("cold", "Cold"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),

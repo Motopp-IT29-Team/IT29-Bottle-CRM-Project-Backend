@@ -12,6 +12,7 @@ from common.utils import (
     INDCHOICES,
     LEAD_DEPARTMENT,
     LEAD_LANGUAGE,
+    LEAD_RATING,
     LEAD_SALUTATION,
     LEAD_SOURCE,
     LEAD_STATUS,
@@ -50,6 +51,9 @@ class Lead(BaseModel):
     phone = PhoneNumberField(null=True, blank=True)
     language = models.CharField(
         _("Preferred Language"), max_length=50, choices=LEAD_LANGUAGE, default="english", blank=True, db_column="preferred_language"
+    )
+    rating = models.CharField(
+        _("Rating"), max_length=10, choices=LEAD_RATING, default="warm", blank=True
     )
     status = models.CharField(
         _("Status of Lead"), max_length=255, blank=True, null=True, choices=LEAD_STATUS
