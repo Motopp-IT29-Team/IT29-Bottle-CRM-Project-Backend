@@ -78,6 +78,14 @@ LEAD_SALUTATION = (
     ("prof", "Prof"),
 )
 
+LEAD_DEPARTMENT = (
+    ("sales", "Sales"),
+    ("marketing", "Marketing"),
+    ("support", "Support"),
+    ("finance", "Finance"),
+    ("operations", "Operations"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),
