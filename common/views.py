@@ -78,6 +78,9 @@ from common.models import APISettings
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsOrgAdmin
+import traceback
+import sys
+from django.utils import timezone
 
 class GetTeamsAndUsersView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -608,60 +611,86 @@ class OrgProfileCreateView(APIView):
         request=OrgProfileCreateSerializer
     )
     def post(self, request, format=None):
-        data = request.data
-        data['api_key'] = secrets.token_hex(16)
-        serializer = self.serializer_class(data=data)
+        try:
+            print("=== OrgProfileCreateView POST START ===", file=sys.stderr)
+            print(f"User: {request.user.email}", file=sys.stderr)
+            print(f"User first_name: {getattr(request.user, 'first_name', 'N/A')}", file=sys.stderr)
+            print(f"User last_name: {getattr(request.user, 'last_name', 'N/A')}", file=sys.stderr)
+            print(f"Data: {request.data}", file=sys.stderr)
 
-        if serializer.is_valid():
-            org_obj = serializer.save()
+            data = request.data
+            data['api_key'] = secrets.token_hex(16)
+            serializer = self.serializer_class(data=data)
 
-            # Check if profile already exists for this org
-            existing_profile = self.model2.objects.filter(user=request.user, org=org_obj).first()
+            if serializer.is_valid():
+                print("=== Serializer valid ===", file=sys.stderr)
+                org_obj = serializer.save()
+                print(f"=== Org created: {org_obj.id} ===", file=sys.stderr)
 
-            if existing_profile:
-                # Update existing profile
-                profile_obj = existing_profile
-                profile_obj.is_organization_admin = True
-                profile_obj.role = 'ADMIN'
-                profile_obj.save()
-            else:
-                # Create new profile with names from User model or request data
-                first_name = data.get('first_name') or request.user.first_name or ''
-                last_name = data.get('last_name') or request.user.last_name or ''
+                # Check if profile already exists for this org
+                existing_profile = self.model2.objects.filter(user=request.user, org=org_obj).first()
 
-                # If still empty, try to get from existing profile
-                if not first_name or not last_name:
-                    existing_user_profile = self.model2.objects.filter(user=request.user).first()
-                    if existing_user_profile:
-                        first_name = first_name or existing_user_profile.first_name
-                        last_name = last_name or existing_user_profile.last_name
+                if existing_profile:
+                    print("=== Profile exists, updating ===", file=sys.stderr)
+                    # Update existing profile
+                    profile_obj = existing_profile
+                    profile_obj.is_organization_admin = True
+                    profile_obj.role = 'ADMIN'
+                    profile_obj.save()
+                else:
+                    print("=== Creating new profile ===", file=sys.stderr)
+                    # Create new profile with names from User model or request data
+                    first_name = data.get('first_name') or getattr(request.user, 'first_name', '') or ''
+                    last_name = data.get('last_name') or getattr(request.user, 'last_name', '') or ''
 
-                profile_obj = self.model2.objects.create(
-                    user=request.user,
-                    org=org_obj,
-                    first_name=first_name,
-                    last_name=last_name,
-                    date_of_joining=timezone.now().date(),
-                    is_organization_admin=True,
-                    role='ADMIN'
+                    print(f"=== Names from user: first={first_name}, last={last_name} ===", file=sys.stderr)
+
+                    # If still empty, try to get from existing profile
+                    if not first_name or not last_name:
+                        existing_user_profile = self.model2.objects.filter(user=request.user).first()
+                        if existing_user_profile:
+                            first_name = first_name or existing_user_profile.first_name
+                            last_name = last_name or existing_user_profile.last_name
+                            print(f"=== Names from existing profile: first={first_name}, last={last_name} ===",
+                                  file=sys.stderr)
+
+                    print(f"=== Final names: first={first_name}, last={last_name} ===", file=sys.stderr)
+
+                    profile_obj = self.model2.objects.create(
+                        user=request.user,
+                        org=org_obj,
+                        first_name=first_name,
+                        last_name=last_name,
+                        date_of_joining=timezone.now().date(),
+                        is_organization_admin=True,
+                        role='ADMIN'
+                    )
+                    print(f"=== Profile created: {profile_obj.id} ===", file=sys.stderr)
+
+                print("=== OrgProfileCreateView POST SUCCESS ===", file=sys.stderr)
+                return Response(
+                    {
+                        "error": False,
+                        "message": "New Org is Created.",
+                        "org": self.serializer_class(org_obj).data,
+                        "status": status.HTTP_201_CREATED,
+                    }
                 )
-
-            return Response(
-                {
-                    "error": False,
-                    "message": "New Org is Created.",
-                    "org": self.serializer_class(org_obj).data,
-                    "status": status.HTTP_201_CREATED,
-                }
-            )
-        else:
-            return Response(
-                {
-                    "error": True,
-                    "errors": serializer.errors,
-                    "status": status.HTTP_400_BAD_REQUEST,
-                }
-            )
+            else:
+                print(f"=== Serializer errors: {serializer.errors} ===", file=sys.stderr)
+                return Response(
+                    {
+                        "error": True,
+                        "errors": serializer.errors,
+                        "status": status.HTTP_400_BAD_REQUEST,
+                    }
+                )
+        except Exception as e:
+            print(f"=== EXCEPTION in OrgProfileCreateView ===", file=sys.stderr)
+            print(f"Error type: {type(e).__name__}", file=sys.stderr)
+            print(f"Error message: {str(e)}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            raise
 
     @extend_schema(
         description="Just Pass the token, will return ORG list, associated with user"
