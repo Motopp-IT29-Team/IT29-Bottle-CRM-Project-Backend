@@ -107,8 +107,8 @@ class Lead(BaseModel):
     organization = models.CharField(_("Organization"), max_length=255, null=True)
     probability = models.IntegerField(default=0, blank=True, null=True)
     close_date = models.DateField(default=None, null=True)
-    do_not_call = models.CharField(
-        _("Do Not Call"), max_length=10, blank=True, default="no"
+    do_not_call = models.BooleanField(
+        _("Do Not Call"), default=False, blank=True
     )
 
     class Meta:
