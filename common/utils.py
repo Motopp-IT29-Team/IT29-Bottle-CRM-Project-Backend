@@ -86,6 +86,15 @@ LEAD_DEPARTMENT = (
     ("operations", "Operations"),
 )
 
+LEAD_LANGUAGE = (
+    ("english", "English"),
+    ("dutch", "Dutch"),
+    ("arabic", "Arabic"),
+    ("german", "German"),
+    ("french", "French"),
+    ("spanish", "Spanish"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),

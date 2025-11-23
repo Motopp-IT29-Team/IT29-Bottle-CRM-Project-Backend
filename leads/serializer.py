@@ -39,6 +39,7 @@ class LeadSerializer(serializers.ModelSerializer):
     lead_attachment = AttachmentsSerializer(read_only=True, many=True)
     teams = TeamsSerializer(read_only=True, many=True)
     lead_comments = LeadCommentSerializer(read_only=True, many=True)
+    preferred_language = serializers.CharField(source='language', read_only=True)
 
     def get_country(self, obj):
         return obj.get_country_display()
@@ -51,6 +52,8 @@ class LeadSerializer(serializers.ModelSerializer):
             "salutation",
             "title",
             "department",
+            "language",
+            "preferred_language",
             "first_name",
             "last_name",
             "phone",
@@ -90,6 +93,7 @@ class LeadSerializer(serializers.ModelSerializer):
 
 class LeadCreateSerializer(serializers.ModelSerializer):
     probability = serializers.IntegerField(max_value=100)
+    preferred_language = serializers.CharField(source='language', required=False, allow_blank=True)
 
     def __init__(self, *args, **kwargs):
         request_obj = kwargs.pop("request_obj", None)
@@ -147,6 +151,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "salutation",
             "title",
             "department",
+            "preferred_language",
             "phone",
             "email",
             "status",
