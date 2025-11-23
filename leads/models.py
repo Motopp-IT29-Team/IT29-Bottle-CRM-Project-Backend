@@ -11,6 +11,7 @@ from common.utils import (
     COUNTRIES,
     INDCHOICES,
     LEAD_BUDGET_RANGE,
+    LEAD_DECISION_TIMEFRAME,
     LEAD_DEPARTMENT,
     LEAD_LANGUAGE,
     LEAD_RATING,
@@ -58,6 +59,9 @@ class Lead(BaseModel):
     )
     budget_range = models.CharField(
         _("Budget Range"), max_length=50, choices=LEAD_BUDGET_RANGE, blank=True, null=True
+    )
+    decision_timeframe = models.CharField(
+        _("Decision Timeframe"), max_length=50, choices=LEAD_DECISION_TIMEFRAME, blank=True, null=True
     )
     status = models.CharField(
         _("Status of Lead"), max_length=255, blank=True, null=True, choices=LEAD_STATUS

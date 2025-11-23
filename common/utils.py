@@ -108,6 +108,13 @@ LEAD_BUDGET_RANGE = (
     ("over_25000", "Over €25,000"),
 )
 
+LEAD_DECISION_TIMEFRAME = (
+    ("within_1_week", "Within 1 week"),
+    ("within_1_month", "Within 1 month"),
+    ("within_3_months", "Within 3 months"),
+    ("more_than_3_months", "More than 3 months"),
+)
+
 LEAD_STATUS = (
     ("new", "New"),
     ("working", "Working"),
