@@ -10,6 +10,12 @@ from common.base import BaseModel
 from common.utils import (
     COUNTRIES,
     INDCHOICES,
+    LEAD_BUDGET_RANGE,
+    LEAD_DECISION_TIMEFRAME,
+    LEAD_DEPARTMENT,
+    LEAD_LANGUAGE,
+    LEAD_RATING,
+    LEAD_SALUTATION,
     LEAD_SOURCE,
     LEAD_STATUS,
     return_complete_address,
@@ -32,13 +38,31 @@ class Company(BaseModel):
         return f"{self.name}"
 
 class Lead(BaseModel):
+    salutation = models.CharField(
+        _("Salutation"), max_length=10, choices=LEAD_SALUTATION, blank=True, null=True
+    )
     title = models.CharField(
         pgettext_lazy("Treatment Pronouns for the customer", "Title"), max_length=64
+    )
+    department = models.CharField(
+        _("Department"), max_length=50, choices=LEAD_DEPARTMENT, default="sales", blank=True
     )
     first_name = models.CharField(_("First name"), null=True, max_length=255)
     last_name = models.CharField(_("Last name"), null=True, max_length=255)
     email = models.EmailField(null=True, blank=True)
     phone = PhoneNumberField(null=True, blank=True)
+    language = models.CharField(
+        _("Preferred Language"), max_length=50, choices=LEAD_LANGUAGE, default="english", blank=True, db_column="preferred_language"
+    )
+    rating = models.CharField(
+        _("Rating"), max_length=10, choices=LEAD_RATING, default="warm", blank=True
+    )
+    budget_range = models.CharField(
+        _("Budget Range"), max_length=50, choices=LEAD_BUDGET_RANGE, blank=True, null=True
+    )
+    decision_timeframe = models.CharField(
+        _("Decision Timeframe"), max_length=50, choices=LEAD_DECISION_TIMEFRAME, blank=True, null=True
+    )
     status = models.CharField(
         _("Status of Lead"), max_length=255, blank=True, null=True, choices=LEAD_STATUS
     )
@@ -83,6 +107,9 @@ class Lead(BaseModel):
     organization = models.CharField(_("Organization"), max_length=255, null=True)
     probability = models.IntegerField(default=0, blank=True, null=True)
     close_date = models.DateField(default=None, null=True)
+    do_not_call = models.BooleanField(
+        _("Do Not Call"), default=False, blank=True
+    )
 
     class Meta:
         verbose_name = "Lead"

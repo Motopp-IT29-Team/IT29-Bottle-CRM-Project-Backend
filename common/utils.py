@@ -70,12 +70,57 @@ ROLES = (
     ("USER", "USER"),
 )
 
+LEAD_SALUTATION = (
+    ("mr", "Mr"),
+    ("ms", "Ms"),
+    ("mrs", "Mrs"),
+    ("dr", "Dr"),
+    ("prof", "Prof"),
+)
+
+LEAD_DEPARTMENT = (
+    ("sales", "Sales"),
+    ("marketing", "Marketing"),
+    ("support", "Support"),
+    ("finance", "Finance"),
+    ("operations", "Operations"),
+)
+
+LEAD_LANGUAGE = (
+    ("english", "English"),
+    ("dutch", "Dutch"),
+    ("arabic", "Arabic"),
+    ("german", "German"),
+    ("french", "French"),
+    ("spanish", "Spanish"),
+)
+
+LEAD_RATING = (
+    ("hot", "Hot"),
+    ("warm", "Warm"),
+    ("cold", "Cold"),
+)
+
+LEAD_BUDGET_RANGE = (
+    ("less_than_5000", "Less than €5,000"),
+    ("5000_to_10000", "€5,000–€10,000"),
+    ("10000_to_25000", "€10,000–€25,000"),
+    ("over_25000", "Over €25,000"),
+)
+
+LEAD_DECISION_TIMEFRAME = (
+    ("within_1_week", "Within 1 week"),
+    ("within_1_month", "Within 1 month"),
+    ("within_3_months", "Within 3 months"),
+    ("more_than_3_months", "More than 3 months"),
+)
+
 LEAD_STATUS = (
-    ("assigned", "Assigned"),
-    ("in process", "In Process"),
-    ("converted", "Converted"),
-    ("recycled", "Recycled"),
-    ("closed", "Closed"),
+    ("new", "New"),
+    ("working", "Working"),
+    ("qualified", "Qualified"),
+    ("unqualified", "Unqualified"),
+    ("on hold", "On Hold"),
 )
 
 

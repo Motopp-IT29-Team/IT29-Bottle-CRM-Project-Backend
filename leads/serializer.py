@@ -39,16 +39,24 @@ class LeadSerializer(serializers.ModelSerializer):
     lead_attachment = AttachmentsSerializer(read_only=True, many=True)
     teams = TeamsSerializer(read_only=True, many=True)
     lead_comments = LeadCommentSerializer(read_only=True, many=True)
+    preferred_language = serializers.CharField(source='language', read_only=True)
 
     def get_country(self, obj):
         return obj.get_country_display()
 
     class Meta:
         model = Lead
-        # fields = ‘__all__’
+        # fields = '__all__'
         fields = (
             "id",
+            "salutation",
             "title",
+            "department",
+            "language",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
             "first_name",
             "last_name",
             "phone",
@@ -82,16 +90,18 @@ class LeadSerializer(serializers.ModelSerializer):
             "organization",
             "probability",
             "close_date",
+            "do_not_call",
         )
 
 
 class LeadCreateSerializer(serializers.ModelSerializer):
     probability = serializers.IntegerField(max_value=100)
+    preferred_language = serializers.CharField(source='language', required=False, allow_blank=True)
 
     def __init__(self, *args, **kwargs):
         request_obj = kwargs.pop("request_obj", None)
         super().__init__(*args, **kwargs)
-        if self.initial_data and self.initial_data.get("status") == "converted":
+        if self.initial_data and self.initial_data.get("status") == "qualified":
             self.fields["account_name"].required = True
             self.fields["email"].required = True
         self.fields["first_name"].required = False
@@ -141,7 +151,13 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "account_name",
+            "salutation",
             "title",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
             "phone",
             "email",
             "status",
@@ -163,6 +179,7 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "organization",
             "probability",
             "close_date",
+            "do_not_call",
             # "lead_attachment",
         )
 
