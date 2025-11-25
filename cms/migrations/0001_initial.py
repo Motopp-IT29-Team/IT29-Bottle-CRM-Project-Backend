@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('wagtailcore', '0094_alter_page_locale'),
-        ('wagtailimages', '0027_image_description'),
+        ('wagtailimages', '0026_delete_uploadedimage'),
     ]
 
     operations = [
