@@ -166,17 +166,17 @@ RATING_CHOICES = (
 )
 
 BUDGET_CHOICES = (
-    ('less_5k', 'Less than €5,000'),
-    ('5k_10k', '€5,000–€10,000'),
-    ('10k_25k', '€10,000–€25,000'),
-    ('over_25k', 'Over €25,000'),
+    ("less_than_5000", "Less than €5,000"),
+    ("5000_to_10000", "€5,000–€10,000"),
+    ("10000_to_25000", "€10,000–€25,000"),
+    ("over_25000", "Over €25,000"),
 )
 
 TIMEFRAME_CHOICES = (
-    ('1_week', 'Within 1 week'),
-    ('1_month', 'Within 1 month'),
-    ('3_months', 'Within 3 months'),
-    ('more_3_months', 'More than 3 months'),
+    ("within_1_week", "Within 1 week"),
+    ("within_1_month", "Within 1 month"),
+    ("within_3_months", "Within 3 months"),
+    ("more_than_3_months", "More than 3 months"),
 )
 
 STATUS_CHOICE = (
