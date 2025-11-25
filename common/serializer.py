@@ -49,20 +49,6 @@ class CommentSerializer(serializers.ModelSerializer):
             "profile",
         )
 
-
-class LeadCommentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Comment
-        fields = (
-            "id",
-            "comment",
-            "commented_on",
-            "commented_by",
-            "lead",
-        )
-
-
-
 class OrgProfileCreateSerializer(serializers.ModelSerializer):
     """
     It is for creating organization
@@ -251,6 +237,20 @@ class ProfileSerializer(serializers.ModelSerializer):
             'deactivated_by_email',
             'deactivated_at',
         ]
+
+
+class LeadCommentSerializer(serializers.ModelSerializer):
+    commented_by = ProfileSerializer(read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "comment",
+            "commented_on",
+            "commented_by",
+            "lead",
+        )
 
 
 class AttachmentsSerializer(serializers.ModelSerializer):

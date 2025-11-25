@@ -134,6 +134,51 @@ LEAD_SOURCE = (
     ("other", "Other"),
 )
 
+SALUTATION_CHOICES = (
+    ('Mr', 'Mr'),
+    ('Ms', 'Ms'),
+    ('Mrs', 'Mrs'),
+    ('Dr', 'Dr'),
+    ('Prof', 'Prof'),
+)
+
+DEPARTMENT_CHOICES = (
+    ('Sales', 'Sales'),
+    ('Marketing', 'Marketing'),
+    ('Support', 'Support'),
+    ('Finance', 'Finance'),
+    ('Operations', 'Operations'),
+)
+
+LANGUAGE_CHOICES = (
+    ('English', 'English'),
+    ('Dutch', 'Dutch'),
+    ('Arabic', 'Arabic'),
+    ('German', 'German'),
+    ('French', 'French'),
+    ('Spanish', 'Spanish'),
+)
+
+RATING_CHOICES = (
+    ('Hot', 'Hot'),
+    ('Warm', 'Warm'),
+    ('Cold', 'Cold'),
+)
+
+BUDGET_CHOICES = (
+    ('less_5k', 'Less than €5,000'),
+    ('5k_10k', '€5,000–€10,000'),
+    ('10k_25k', '€10,000–€25,000'),
+    ('over_25k', 'Over €25,000'),
+)
+
+TIMEFRAME_CHOICES = (
+    ('1_week', 'Within 1 week'),
+    ('1_month', 'Within 1 month'),
+    ('3_months', 'Within 3 months'),
+    ('more_3_months', 'More than 3 months'),
+)
+
 STATUS_CHOICE = (
     ("New", "New"),
     ("Assigned", "Assigned"),
