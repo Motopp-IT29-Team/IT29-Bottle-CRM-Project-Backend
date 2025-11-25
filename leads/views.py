@@ -181,10 +181,14 @@ class LeadListView(APIView, LimitOffsetPagination):
                 lead_obj.contacts.add(*obj_contact)
 
             recipients = list(lead_obj.assigned_to.all().values_list("id", flat=True))
-            send_email_to_assigned_user.delay(
-                recipients,
-                lead_obj.id,
-            )
+            try:
+                send_email_to_assigned_user.delay(
+                    recipients,
+                    lead_obj.id,
+                )
+            except Exception as e:
+                # Celery not available, skip async email
+                pass
 
             if request.FILES.get("lead_attachment"):
                 attachment = Attachments()
@@ -193,7 +197,6 @@ class LeadListView(APIView, LimitOffsetPagination):
                 attachment.lead = lead_obj
                 attachment.attachment = request.FILES.get("lead_attachment")
                 attachment.save()
-
             if data.get("teams",None):
                 teams_list = data.get("teams")
                 teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
@@ -206,7 +209,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                 )
                 lead_obj.assigned_to.add(*profiles)
 
-            if data.get("status") == "converted":
+            if data.get("status") == "qualified":
                 account_object = Account.objects.create(
                     created_by=request.profile.user,
                     name=lead_obj.account_name,
@@ -223,11 +226,11 @@ class LeadListView(APIView, LimitOffsetPagination):
                 account_object.billing_state = lead_obj.state
                 account_object.billing_postcode = lead_obj.postcode
                 account_object.billing_country = lead_obj.country
-                comments = Comment.objects.filter(lead=self.lead_obj)
+                comments = Comment.objects.filter(lead=lead_obj)
                 if comments.exists():
                     for comment in comments:
                         comment.account_id = account_object.id
-                attachments = Attachments.objects.filter(lead=self.lead_obj)
+                attachments = Attachments.objects.filter(lead=lead_obj)
                 if attachments.exists():
                     for attachment in attachments:
                         attachment.account_id = account_object.id
@@ -487,7 +490,7 @@ class LeadDetailView(APIView):
                 )
                 lead_obj.assigned_to.add(*profiles)
 
-            if params.get("status") == "converted":
+            if params.get("status") == "qualified":
                 account_object = Account.objects.create(
                     created_by=request.profile.user,
                     name=lead_obj.account_name,
