@@ -76,12 +76,18 @@ class LeadSerializer(serializers.ModelSerializer):
             "tags",
             "created_from_site",
             "teams",
-            "skype_ID",
             "industry",
             "company",
             "organization",
             "probability",
             "close_date",
+            "salutation",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
+            "do_not_call",
         )
 
 
@@ -91,12 +97,16 @@ class LeadCreateSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         request_obj = kwargs.pop("request_obj", None)
         super().__init__(*args, **kwargs)
-        if self.initial_data and self.initial_data.get("status") == "converted":
-            self.fields["account_name"].required = True
-            self.fields["email"].required = True
-        self.fields["first_name"].required = False
-        self.fields["last_name"].required = False
+
+        self.fields["first_name"].required = True
+        self.fields["last_name"].required = True
+        self.fields["email"].required = True
+        self.fields["phone"].required = True
         self.fields["title"].required = True
+        self.fields["account_name"].required = True
+        self.fields["source"].required = True
+        self.fields["status"].required = True
+
         self.org = request_obj.profile.org
 
         if self.instance:
@@ -105,12 +115,48 @@ class LeadCreateSerializer(serializers.ModelSerializer):
                 prev_choices = prev_choices + [("micropyramid", "Micropyramid")]
                 self.fields["source"]._set_choices(prev_choices)
 
+    def validate_email(self, email):
+        """Check for duplicate email"""
+        if self.instance:
+            if (
+                    Lead.objects.filter(email__iexact=email, org=self.org)
+                            .exclude(id=self.instance.id)
+                            .exists()
+            ):
+                raise serializers.ValidationError(
+                    "Lead already exists with this email"
+                )
+        else:
+            if Lead.objects.filter(email__iexact=email, org=self.org).exists():
+                raise serializers.ValidationError(
+                    "Lead already exists with this email"
+                )
+        return email
+
+    def validate_phone(self, phone):
+        """Check for duplicate phone"""
+        if self.instance:
+            if (
+                    Lead.objects.filter(phone=phone, org=self.org)
+                            .exclude(id=self.instance.id)
+                            .exists()
+            ):
+                raise serializers.ValidationError(
+                    "Lead already exists with this phone number"
+                )
+        else:
+            if Lead.objects.filter(phone=phone, org=self.org).exists():
+                raise serializers.ValidationError(
+                    "Lead already exists with this phone number"
+                )
+        return phone
+
     def validate_account_name(self, account_name):
         if self.instance:
             if (
-                Account.objects.filter(name__iexact=account_name, org=self.org)
-                .exclude(id=self.instance.id)
-                .exists()
+                    Account.objects.filter(name__iexact=account_name, org=self.org)
+                            .exclude(id=self.instance.id)
+                            .exists()
             ):
                 raise serializers.ValidationError(
                     "Account already exists with this name"
@@ -125,9 +171,9 @@ class LeadCreateSerializer(serializers.ModelSerializer):
     def validate_title(self, title):
         if self.instance:
             if (
-                Lead.objects.filter(title__iexact=title, org=self.org)
-                .exclude(id=self.instance.id)
-                .exists()
+                    Lead.objects.filter(title__iexact=title, org=self.org)
+                            .exclude(id=self.instance.id)
+                            .exists()
             ):
                 raise serializers.ValidationError("Lead already exists with this title")
         else:
@@ -149,7 +195,6 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "website",
             "description",
             "address_line",
-            # "contacts",
             "street",
             "city",
             "state",
@@ -157,13 +202,18 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             "opportunity_amount",
             "country",
             "org",
-            "skype_ID",
             "industry",
             "company",
             "organization",
             "probability",
             "close_date",
-            # "lead_attachment",
+            "salutation",
+            "department",
+            "preferred_language",
+            "rating",
+            "budget_range",
+            "decision_timeframe",
+            "do_not_call",
         )
 
 class LeadCreateSwaggerSerializer(serializers.ModelSerializer):

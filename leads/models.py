@@ -12,6 +12,12 @@ from common.utils import (
     INDCHOICES,
     LEAD_SOURCE,
     LEAD_STATUS,
+    SALUTATION_CHOICES,
+    DEPARTMENT_CHOICES,
+    LANGUAGE_CHOICES,
+    RATING_CHOICES,
+    BUDGET_CHOICES,
+    TIMEFRAME_CHOICES,
     return_complete_address,
 )
 from contacts.models import Contact
@@ -76,13 +82,19 @@ class Lead(BaseModel):
         blank=True,
         related_name="lead_company",
     )
-    skype_ID = models.CharField(max_length=100, null=True, blank=True)
     industry = models.CharField(
         _("Industry Type"), max_length=255, choices=INDCHOICES, blank=True, null=True
     )
     organization = models.CharField(_("Organization"), max_length=255, null=True)
     probability = models.IntegerField(default=0, blank=True, null=True)
     close_date = models.DateField(default=None, null=True)
+    salutation = models.CharField(max_length=10, choices=SALUTATION_CHOICES, blank=True, null=True)
+    department = models.CharField(max_length=50, choices=DEPARTMENT_CHOICES, default='Sales')
+    preferred_language = models.CharField(max_length=50, choices=LANGUAGE_CHOICES, default='English')
+    rating = models.CharField(max_length=10, choices=RATING_CHOICES, blank=True, null=True)
+    budget_range = models.CharField(max_length=50, choices=BUDGET_CHOICES, blank=True, null=True)
+    decision_timeframe = models.CharField(max_length=50, choices=TIMEFRAME_CHOICES, blank=True, null=True)
+    do_not_call = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Lead"

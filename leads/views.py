@@ -156,13 +156,14 @@ class LeadListView(APIView, LimitOffsetPagination):
         tags=["Leads"],description="Leads Create", parameters=swagger_params1.organization_params,request=LeadCreateSwaggerSerializer
     )
     def post(self, request, *args, **kwargs):
-
-        print('test')
         data = request.data
         serializer = LeadCreateSerializer(data=data, request_obj=request)
         if serializer.is_valid():
-            lead_obj = serializer.save(created_by=request.profile.user
-            , org=request.profile.org)
+            lead_obj = serializer.save(
+                created_by=request.profile.user,
+                org=request.profile.org,
+                organization=request.profile.org.name
+            )
             if data.get("tags",None):
                 tags = data.get("tags")
                 for t in tags:
@@ -649,16 +650,65 @@ class LeadCommentView(APIView):
 
 class LeadAttachmentView(APIView):
     model = Attachments
-    #authentication_classes = (CustomDualAuthentication,)
     permission_classes = (IsAuthenticated,)
+
+    @extend_schema(tags=["Leads"], parameters=swagger_params1.organization_params)
+    def post(self, request, pk, format=None):
+        """Upload attachment to lead"""
+        try:
+            lead = Lead.objects.get(pk=pk, org=request.profile.org)
+        except Lead.DoesNotExist:
+            return Response(
+                {"error": True, "errors": "Lead not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check permissions
+        if request.profile.role != "ADMIN" and not request.user.is_superuser:
+            if not (
+                    (request.profile.user == lead.created_by)
+                    or (request.profile in lead.assigned_to.all())
+            ):
+                return Response(
+                    {
+                        "error": True,
+                        "errors": "You do not have Permission to perform this action",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        if request.FILES.get("lead_attachment"):
+            attachment = Attachments()
+            attachment.created_by = request.profile.user
+            attachment.file_name = request.FILES.get("lead_attachment").name
+            attachment.lead = lead
+            attachment.attachment = request.FILES.get("lead_attachment")
+            attachment.save()
+
+            # Return updated data
+            attachments = Attachments.objects.filter(lead=lead).order_by("-id")
+            return Response(
+                {
+                    "error": False,
+                    "message": "Attachment uploaded successfully",
+                    "attachment": AttachmentsSerializer(attachment).data,
+                    "attachments": AttachmentsSerializer(attachments, many=True).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            {"error": True, "errors": "No file provided"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     @extend_schema(tags=["Leads"], parameters=swagger_params1.organization_params)
     def delete(self, request, pk, format=None):
         self.object = self.model.objects.get(pk=pk)
         if (
-            request.profile.role == "ADMIN"
-            or request.user.is_superuser
-            or request.profile.user == self.object.created_by
+                request.profile.role == "ADMIN"
+                or request.user.is_superuser
+                or request.profile.user == self.object.created_by
         ):
             self.object.delete()
             return Response(
@@ -739,6 +789,42 @@ class CreateLeadFromSite(APIView):
             {"error": True, "message": "Invalid data"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+class CheckDuplicateLeadView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["Leads"],
+        parameters=[
+            OpenApiParameter(name='email', type=str, required=False),
+            OpenApiParameter(name='phone', type=str, required=False),
+        ]
+    )
+    def get(self, request):
+        email = request.query_params.get('email')
+        phone = request.query_params.get('phone')
+
+        if not email and not phone:
+            return Response(
+                {'error': True, 'message': 'Email or phone required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        duplicates = Lead.objects.filter(org=request.profile.org)
+
+        if email:
+            duplicates = duplicates.filter(email=email)
+
+        if phone:
+            duplicates = duplicates.filter(phone=phone)
+
+        exists = duplicates.exists()
+
+        return Response({
+            'duplicate': exists,
+            'message': 'Duplicate lead found' if exists else 'No duplicate found'
+        })
 
 
 class CompaniesView(APIView):
