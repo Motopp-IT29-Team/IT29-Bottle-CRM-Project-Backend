@@ -715,9 +715,24 @@ class ProfileView(APIView):
 
     @extend_schema(parameters=swagger_params1.organization_params)
     def get(self, request, format=None):
-        profile = Profile.objects.get(user=request.user)
+        org_id = request.META.get('HTTP_ORG')
+
+        profile = Profile.objects.get(user=request.user, org_id=org_id)
+
+        current_org = None
+        if org_id:
+            from common.models import Org
+            current_org = Org.objects.filter(id=org_id).first()
+
         context = {}
         context["user_obj"] = ProfileSerializer(profile).data
+
+        if current_org:
+            context["current_org"] = {
+                "id": str(current_org.id),
+                "name": current_org.name
+            }
+
         return Response(context, status=status.HTTP_200_OK)
 
 class DocumentListView(APIView, LimitOffsetPagination):
