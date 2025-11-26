@@ -24,3 +24,7 @@ sendgrid==6.11.0
 django-phonenumber-field
 arrow
 phonenumbers
+
+# Testing
+pytest
+pytest-django
