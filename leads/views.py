@@ -153,7 +153,8 @@ class LeadListView(APIView, LimitOffsetPagination):
         return Response(context)
 
     @extend_schema(
-        tags=["Leads"],description="Leads Create", parameters=swagger_params1.organization_params,request=LeadCreateSwaggerSerializer
+        tags=["Leads"], description="Leads Create", parameters=swagger_params1.organization_params,
+        request=LeadCreateSwaggerSerializer
     )
     def post(self, request, *args, **kwargs):
         data = request.data
@@ -164,7 +165,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                 org=request.profile.org,
                 organization=request.profile.org.name
             )
-            if data.get("tags",None):
+            if data.get("tags", None):
                 tags = data.get("tags")
                 for t in tags:
                     tag = Tags.objects.filter(slug=t.lower())
@@ -174,7 +175,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                         tag = Tags.objects.create(name=t)
                     lead_obj.tags.add(tag)
 
-            if data.get("contacts",None):
+            if data.get("contacts", None):
                 obj_contact = Contact.objects.filter(
                     id__in=data.get("contacts"), org=request.profile.org
                 )
@@ -190,19 +191,21 @@ class LeadListView(APIView, LimitOffsetPagination):
                 # Celery not available, skip async email
                 pass
 
-            if request.FILES.get("lead_attachment"):
+            files = request.FILES.getlist("lead_attachment")
+            for file in files:
                 attachment = Attachments()
                 attachment.created_by = request.profile.user
-                attachment.file_name = request.FILES.get("lead_attachment").name
+                attachment.file_name = file.name
                 attachment.lead = lead_obj
-                attachment.attachment = request.FILES.get("lead_attachment")
+                attachment.attachment = file
                 attachment.save()
-            if data.get("teams",None):
+
+            if data.get("teams", None):
                 teams_list = data.get("teams")
                 teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
                 lead_obj.teams.add(*teams)
 
-            if data.get("assigned_to",None):
+            if data.get("assigned_to", None):
                 assinged_to_list = data.get("assigned_to")
                 profiles = Profile.objects.filter(
                     id__in=assinged_to_list, org=request.profile.org
@@ -237,7 +240,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                 for tag in lead_obj.tags.all():
                     account_object.tags.add(tag)
 
-                if data.get("assigned_to",None):
+                if data.get("assigned_to", None):
                     assigned_to_list = data.getlist("assigned_to")
                     recipients = assigned_to_list
                     send_email_to_assigned_user.delay(
