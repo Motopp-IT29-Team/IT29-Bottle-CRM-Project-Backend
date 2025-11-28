@@ -414,7 +414,7 @@ class UserDetailView(APIView):
 
         if profile.org != request.profile.org:
             return Response(
-                {"error": True, "errors": "User company doesnot match with header...."},
+                {"error": True, "errors": "User company does not match with header"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -424,40 +424,27 @@ class UserDetailView(APIView):
         address_serializer = BillingAddressSerializer(data=params, instance=address_obj)
         profile_serializer = CreateProfileSerializer(data=params, instance=profile)
 
-        data = {}
+        errors = {}
         if not serializer.is_valid():
-            data["contact_errors"] = serializer.errors
+            errors["contact_errors"] = serializer.errors
         if not address_serializer.is_valid():
-            data["address_errors"] = (address_serializer.errors,)
+            errors["address_errors"] = address_serializer.errors
         if not profile_serializer.is_valid():
-            data["profile_errors"] = (profile_serializer.errors,)
+            errors["profile_errors"] = profile_serializer.errors
+        if errors:
+            errors["error"] = True
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-        if data:
-            data["error"] = True
-            return Response(
-                data,
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if address_serializer.is_valid():
-            address_obj = address_serializer.save()
-            user = serializer.save()
-            user.email = user.email
-            user.save()
-
-        if profile_serializer.is_valid():
-            profile_obj = profile_serializer.save()
-            profile_obj.updated_by = request.user
-            profile_obj.save()
-
-            return Response(
-                {"error": False, "message": "User Updated Successfully"},
-                status=status.HTTP_200_OK,
-            )
+        user = serializer.save()
+        address_obj = address_serializer.save()
+        profile_obj = profile_serializer.save()
+        profile_obj.address = address_obj
+        profile_obj.updated_by = request.user
+        profile_obj.save()
 
         return Response(
-            {"error": True, "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": False, "message": "User Updated Successfully"},
+            status=status.HTTP_200_OK,
         )
 
     @extend_schema(
