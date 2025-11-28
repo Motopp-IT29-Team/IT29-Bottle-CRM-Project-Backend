@@ -207,6 +207,10 @@ class LeadListView(APIView, LimitOffsetPagination):
 
             if data.get("assigned_to", None):
                 assinged_to_list = data.get("assigned_to")
+
+                if isinstance(assinged_to_list, str):
+                    assinged_to_list = [assinged_to_list]
+
                 profiles = Profile.objects.filter(
                     id__in=assinged_to_list, org=request.profile.org
                 )
