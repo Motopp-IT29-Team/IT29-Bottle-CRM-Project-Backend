@@ -111,6 +111,13 @@ class BillingAddressSerializer(serializers.ModelSerializer):
             self.fields["postcode"].required = True
             self.fields["country"].required = True
 
+    def update(self, instance, validated_data):
+        """Update existing address instead of creating new one"""
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        return instance
+
 
 class CreateUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
