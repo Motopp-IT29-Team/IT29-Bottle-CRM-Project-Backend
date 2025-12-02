@@ -361,7 +361,6 @@ class ContactDetailView(APIView):
                 comment_serializer.save(
                     contact_id=self.contact_obj.id,
                     commented_by_id=self.request.profile.id,
-                    org=request.profile.org,
                 )
 
         if self.request.FILES.get("contact_attachment"):
