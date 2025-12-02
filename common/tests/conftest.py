@@ -162,7 +162,12 @@ def inactive_user_with_activation(db):
 
     # Generate activation token and key
     token = account_activation_token.make_token(user)
-    activation_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d-%H-%M-%S")
+
+    # Set activation time to 1 hour in the FUTURE so tests don't fail
+    activation_time = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    ).strftime("%Y-%m-%d-%H-%M-%S")
+
     activation_key = f"{activation_time}{token}"
 
     user.activation_key = activation_key

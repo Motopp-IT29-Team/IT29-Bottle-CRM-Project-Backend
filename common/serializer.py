@@ -1,13 +1,6 @@
 import re
-
-from django.contrib.auth import authenticate
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-
 from common.models import (
     Address,
     APISettings,
@@ -212,17 +205,17 @@ class ProfileSerializer(serializers.ModelSerializer):
     address = BillingAddressSerializer(read_only=True)
 
     created_by_email = serializers.CharField(
-        source='created_by.email',
+        source='created_by.user.email',
         read_only=True,
         allow_null=True
     )
     updated_by_email = serializers.CharField(
-        source='updated_by.email',
+        source='updated_by.user.email',
         read_only=True,
         allow_null=True
     )
     deactivated_by_email = serializers.CharField(
-        source='deactivated_by.email',
+        source='deactivated_by.user.email',
         read_only=True,
         allow_null=True
     )
@@ -302,33 +295,34 @@ class DocumentCreateSerializer(serializers.ModelSerializer):
         request_obj = kwargs.pop("request_obj", None)
         super().__init__(*args, **kwargs)
         self.fields["title"].required = True
+
+        if self.instance is not None:
+            self.fields["document_file"].required = False
+
         self.org = request_obj.profile.org
 
     def validate_title(self, title):
         if self.instance:
-            if (
-                Document.objects.filter(title__iexact=title, org=self.org)
-                .exclude(id=self.instance.id)
-                .exists()
-            ):
+            if Document.objects.filter(title__iexact=title, org=self.org).exclude(id=self.instance.id).exists():
                 raise serializers.ValidationError(
-                    "Document with this Title already exists"
+                    "Document with this Title already exists"
                 )
+            return title
+
         if Document.objects.filter(title__iexact=title, org=self.org).exists():
-            raise serializers.ValidationError("Document with this Title already exists")
+            raise serializers.ValidationError("Document with this Title already exists")
         return title
 
     class Meta:
         model = Document
-        fields = ["title", "document_file", "status", "org"]
+        fields = ["title", "document_file", "status", "org", "created_by"]
+        extra_kwargs = {
+            'created_by': {'required': False}
+        }
 
 
 def find_urls(string):
-    # website_regex = "^((http|https)://)?([A-Za-z0-9.-]+\.[A-Za-z]{2,63})?$"  # (http(s)://)google.com or google.com
-    # website_regex = "^https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,63})?$"  # (http(s)://)google.com
-    # http(s)://google.com
     website_regex = r"^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$"
-    # http(s)://google.com:8000
     website_regex_port = r"^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,63}:[0-9]{2,4}$"
     url = re.findall(website_regex, string)
     url_port = re.findall(website_regex_port, string)
@@ -340,6 +334,7 @@ def find_urls(string):
 class APISettingsSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["website"].required = True
 
     class Meta:
         model = APISettings
@@ -430,14 +425,10 @@ class UserCreateSwaggerSerializer(serializers.Serializer):
     pincode = serializers.CharField(max_length=1000)
     country = serializers.CharField(max_length=1000)
 
+
 class UserUpdateStatusSwaggerSerializer(serializers.Serializer):
-
     STATUS_CHOICES = ["Active", "Inactive"]
-
     status = serializers.ChoiceField(choices = STATUS_CHOICES,required=True)
-
-# backend/common/serializer.py
-
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -447,7 +438,8 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = "email"
 
     def validate(self, attrs):
-        # Ensure 'email' is mapped to 'username' for SimpleJWT
+        if "email" in attrs:
+            attrs["email"] = attrs["email"].lower().strip()
         attrs = attrs.copy()
         if "email" in attrs and "username" not in attrs:
             attrs["username"] = attrs["email"]

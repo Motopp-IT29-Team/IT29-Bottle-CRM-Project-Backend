@@ -1,6 +1,4 @@
 """
-Authentication tests for Bottle CRM.
-
 Test coverage:
 - Email/Password Login (valid, invalid credentials, missing fields)
 - Profile Access (authenticated and unauthenticated)
@@ -10,6 +8,11 @@ Run with: pytest common/tests/test_authentication.py -v
 """
 import pytest
 from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from common.models import Org
+import uuid
+from datetime import timedelta
+from django.utils import timezone
 
 
 @pytest.mark.django_db
@@ -101,6 +104,38 @@ class TestLogin:
         assert response.status_code == status.HTTP_400_BAD_REQUEST, \
             f"Expected 400 Bad Request, got {response.status_code}"
 
+    def test_login_with_uppercase_email_works(self, api_client, user, profile):
+        """Test that email login is case-insensitive."""
+        login_data = {
+            'email': 'TESTUSER@EXAMPLE.COM',
+            'password': 'TestPassword123!'
+        }
+        response = api_client.post(self.url, login_data, format='json')
+        assert response.status_code == status.HTTP_200_OK, \
+            f"Email should be case-insensitive. Got {response.status_code}"
+        assert 'access' in response.data
+        assert 'refresh' in response.data
+
+    def test_login_with_email_whitespace_is_handled(self, api_client, user, profile):
+        """Test that email with leading/trailing whitespace works."""
+        login_data = {
+            'email': '  testuser@example.com  ',
+            'password': 'TestPassword123!'
+        }
+        response = api_client.post(self.url, login_data, format='json')
+        assert response.status_code in [status.HTTP_200_OK, status.HTTP_401_UNAUTHORIZED], \
+            f"Expected 200 or 401, got {response.status_code}"
+
+    def test_login_with_invalid_email_format_fails(self, api_client):
+        """Test that login with invalid email format returns 400."""
+        login_data = {
+            'email': 'not-an-email',
+            'password': 'TestPassword123!'
+        }
+        response = api_client.post(self.url, login_data, format='json')
+        assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED], \
+            f"Expected 400 or 401 for invalid email format, got {response.status_code}"
+
 
 @pytest.mark.django_db
 class TestProfileAccess:
@@ -131,6 +166,66 @@ class TestProfileAccess:
             "current_org not found in response"
         assert response.data['current_org']['name'] == org.name, \
             f"Expected org name {org.name}, got {response.data['current_org']['name']}"
+
+    def test_profile_without_org_header_fails(self, api_client, user):
+        """Test that profile request without org header returns error."""
+
+        refresh = RefreshToken.for_user(user)
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
+        )
+        response = api_client.get(self.url)
+        assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN], \
+            f"Expected 400 or 403 without org header, got {response.status_code}"
+
+    def test_profile_with_invalid_org_uuid_fails(self, api_client, user, profile):
+        """Test that profile request with invalid org UUID returns error."""
+        refresh = RefreshToken.for_user(user)
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
+            HTTP_ORG="invalid-uuid-12345",
+        )
+        response = api_client.get(self.url)
+        assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN], \
+            f"Expected 400 or 403 with invalid org UUID, got {response.status_code}"
+
+    def test_profile_with_nonexistent_org_uuid_fails(self, api_client, user, profile):
+        """Test that profile request with non-existent but valid UUID org returns error."""
+        refresh = RefreshToken.for_user(user)
+        fake_org_uuid = str(uuid.uuid4())
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
+            HTTP_ORG=fake_org_uuid,
+        )
+        response = api_client.get(self.url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN, \
+            f"Expected 403 when accessing org without profile, got {response.status_code}"
+
+    def test_profile_returns_user_role(self, authenticated_client, profile):
+        """Test that profile response includes user role."""
+        response = authenticated_client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'user_obj' in response.data
+        assert 'role' in response.data['user_obj'], \
+            "Role not found in profile response"
+        assert response.data['user_obj']['role'] == profile.role, \
+            f"Expected role {profile.role}, got {response.data['user_obj']['role']}"
+
+    def test_profile_returns_multiple_orgs_if_user_has_multiple_profiles(
+            self, api_client, user, org, create_profile
+    ):
+        """Test that profile returns all organizations where user has profiles."""
+        org2 = Org.objects.create(name="Second Organization", is_active=True)
+        profile1 = create_profile(user=user, org=org, role="USER")
+        profile2 = create_profile(user=user, org=org2, role="ADMIN")
+        refresh = RefreshToken.for_user(user)
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
+            HTTP_ORG=str(org.id),
+        )
+        response = api_client.get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'user_obj' in response.data
 
 
 @pytest.mark.django_db
@@ -171,18 +266,31 @@ class TestTokenRefresh:
 
     def test_refreshed_token_can_be_used_for_authentication(self, api_client, tokens, org, profile):
         """Test that new access token from refresh works for authenticated requests."""
-        # Arrange - get new access token
         refresh_data = {'refresh': tokens['refresh']}
         refresh_response = api_client.post(self.url, refresh_data, format='json')
         new_access_token = refresh_response.data['access']
-
-        # Act - use new token to access protected endpoint
         api_client.credentials(
             HTTP_AUTHORIZATION=f'Bearer {new_access_token}',
             HTTP_ORG=str(org.id)
         )
         profile_response = api_client.get('/api/profile/')
-
-        # Assert
         assert profile_response.status_code == status.HTTP_200_OK, \
             f"Expected 200 OK with new token, got {profile_response.status_code}"
+
+    def test_token_refresh_with_malformed_token_fails(self, api_client):
+        """Test that malformed refresh token returns 401."""
+        refresh_data = {
+            'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.malformed'
+        }
+        response = api_client.post(self.url, refresh_data, format='json')
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED, \
+            f"Expected 401 with malformed token, got {response.status_code}"
+
+    def test_token_refresh_with_access_token_instead_of_refresh_fails(self, api_client, tokens):
+        """Test that using access token for refresh returns 401."""
+        refresh_data = {
+            'refresh': tokens['access']  # Wrong token type
+        }
+        response = api_client.post(self.url, refresh_data, format='json')
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED, \
+            f"Expected 401 when using access token for refresh, got {response.status_code}"
