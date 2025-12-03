@@ -181,7 +181,7 @@ class LeadListView(APIView, LimitOffsetPagination):
 
             recipients = list(lead_obj.assigned_to.all().values_list("id", flat=True))
             try:
-                send_email_to_assigned_user.delay(
+                send_email_to_assigned_user(
                     recipients,
                     lead_obj.id,
                 )
@@ -245,7 +245,7 @@ class LeadListView(APIView, LimitOffsetPagination):
                 if data.get("assigned_to", None):
                     assigned_to_list = data.getlist("assigned_to")
                     recipients = assigned_to_list
-                    send_email_to_assigned_user.delay(
+                    send_email_to_assigned_user(
                         recipients,
                         lead_obj.id,
                     )
@@ -458,7 +458,7 @@ class LeadDetailView(APIView):
                 lead_obj.assigned_to.all().values_list("id", flat=True)
             )
             recipients = list(set(assigned_to_list) - set(previous_assigned_to_users))
-            send_email_to_assigned_user.delay(
+            send_email_to_assigned_user(
                 recipients,
                 lead_obj.id,
             )
@@ -522,7 +522,7 @@ class LeadDetailView(APIView):
                 if params.get("assigned_to"):
                     assigned_to_list = params.getlist("assigned_to")
                     recipients = assigned_to_list
-                    send_email_to_assigned_user.delay(
+                    send_email_to_assigned_user(
                         recipients,
                         lead_obj.id,
                     )
@@ -575,7 +575,7 @@ class LeadUploadView(APIView):
     def post(self, request, *args, **kwargs):
         lead_form = LeadListForm(request.POST, request.FILES)
         if lead_form.is_valid():
-            create_lead_from_file.delay(
+            create_lead_from_file(
                 lead_form.validated_rows,
                 lead_form.invalid_rows,
                 request.profile.id,
@@ -773,7 +773,7 @@ class CreateLeadFromSite(APIView):
             lead.assigned_to.add(profile)
 
             site_address = request.scheme + "://" + request.META["HTTP_HOST"]
-            send_lead_assigned_emails.delay(lead.id, [profile.id], site_address)
+            send_lead_assigned_emails(lead.id, [profile.id], site_address)
 
             try:
                 contact = Contact.objects.create(

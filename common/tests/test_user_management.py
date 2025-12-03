@@ -235,7 +235,7 @@ class TestUserDelete:
     def get_url(self, profile_id):
         return f"/api/user/{profile_id}/"
 
-    @patch('common.views.send_email_user_delete.delay')
+    @patch('common.views.send_email_user_delete')
     def test_admin_can_delete_user(self, mock_send_email, admin_authenticated_client, org, create_user, create_profile):
         """Test that admin can delete user."""
         user = create_user(email='delete@example.com')
