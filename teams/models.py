@@ -1,10 +1,8 @@
 import arrow
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-
 from common.models import Org, Profile
 from common.base import BaseModel
-
 
 
 class Teams(BaseModel):
@@ -31,4 +29,3 @@ class Teams(BaseModel):
         return ",".join(
             [str(_id) for _id in list(self.users.values_list("id", flat=True))]
         )
-        # return ','.join(list(self.users.values_list('id', flat=True)))

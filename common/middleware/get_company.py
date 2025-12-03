@@ -75,5 +75,5 @@ class GetProfileAndOrg(object):
                     )
                     if profile:
                         request.profile = profile
-        except:
+        except (Profile.DoesNotExist, ValidationError, jwt.DecodeError):
             raise PermissionDenied()

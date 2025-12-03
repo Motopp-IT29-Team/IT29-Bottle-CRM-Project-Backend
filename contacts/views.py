@@ -121,7 +121,7 @@ class ContactsListView(APIView, LimitOffsetPagination):
             contact_obj.assigned_to.add(*profiles)
 
         recipients = list(contact_obj.assigned_to.all().values_list("id", flat=True))
-        send_email_to_assigned_user.delay(
+        send_email_to_assigned_user(
             recipients,
             contact_obj.id,
         )
@@ -221,7 +221,7 @@ class ContactDetailView(APIView):
                 contact_obj.assigned_to.all().values_list("id", flat=True)
             )
             recipients = list(set(assigned_to_list) - set(previous_assigned_to_users))
-            send_email_to_assigned_user.delay(
+            send_email_to_assigned_user(
                 recipients,
                 contact_obj.id,
             )
@@ -361,7 +361,6 @@ class ContactDetailView(APIView):
                 comment_serializer.save(
                     contact_id=self.contact_obj.id,
                     commented_by_id=self.request.profile.id,
-                    org=request.profile.org,
                 )
 
         if self.request.FILES.get("contact_attachment"):

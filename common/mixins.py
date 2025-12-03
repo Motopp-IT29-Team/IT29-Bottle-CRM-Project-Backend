@@ -1,13 +1,8 @@
-# Python imports
-import uuid
-
-# Django imports
 from common.models import models
 
 
 class TimeAuditModel(models.Model):
-
-    """To path when the record was created and last modified"""
+    """To track when the record was created and last modified"""
 
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -20,8 +15,10 @@ class TimeAuditModel(models.Model):
 
 
 class UserAuditModel(models.Model):
-
-    """To path when the record was created and last modified"""
+    """
+    To track who created and last modified the record.
+    Uses User instead of Profile to match existing project architecture.
+    """
 
     created_by = models.ForeignKey(
         "common.User",
@@ -29,6 +26,7 @@ class UserAuditModel(models.Model):
         related_name="%(class)s_created_by",
         verbose_name="Created By",
         null=True,
+        blank=True,
     )
     updated_by = models.ForeignKey(
         "common.User",
@@ -36,6 +34,7 @@ class UserAuditModel(models.Model):
         related_name="%(class)s_updated_by",
         verbose_name="Last Modified By",
         null=True,
+        blank=True,
     )
 
     class Meta:
@@ -43,8 +42,7 @@ class UserAuditModel(models.Model):
 
 
 class AuditModel(TimeAuditModel, UserAuditModel):
-
-    """To path when the record was created and last modified"""
+    """To track when the record was created and last modified"""
 
     class Meta:
         abstract = True

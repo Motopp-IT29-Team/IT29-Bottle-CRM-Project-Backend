@@ -136,12 +136,3 @@ class Lead(BaseModel):
         assigned_user_ids = list(self.assigned_to.values_list("id", flat=True))
         user_ids = set(assigned_user_ids) - set(team_user_ids)
         return Profile.objects.filter(id__in=list(user_ids))
-
-    # def save(self, *args, **kwargs):
-    #     super(Lead, self).save(*args, **kwargs)
-    #     queryset = Lead.objects.all().exclude(status='converted').select_related('created_by'
-    #         ).prefetch_related('tags', 'assigned_to',)
-    #     open_leads = queryset.exclude(status='closed')
-    #     close_leads = queryset.filter(status='closed')
-    #     cache.set('admin_leads_open_queryset', open_leads, 60*60)
-    #     cache.set('admin_leads_close_queryset', close_leads, 60*60)

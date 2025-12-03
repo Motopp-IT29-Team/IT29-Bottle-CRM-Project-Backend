@@ -1,61 +1,41 @@
+import datetime
 import json
-import secrets
-from multiprocessing import context
-# from re import template
+import sys
+import traceback
 
 import requests
-from django.contrib.auth.base_user import BaseUserManager
-from django.contrib.auth.hashers import make_password
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.utils import json
-from django.conf import settings
-from django.contrib.auth import authenticate, login
-from django.contrib.auth.hashers import make_password
-from django.db import transaction
 from django.db.models import Q
-from django.http.response import JsonResponse
-from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from django.utils.translation import gettext as _
-from django.views import View
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-#from common.external_auth import CustomDualAuthentication
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.utils import json
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from accounts.models import Account, Contact, Tags
 from accounts.serializer import AccountSerializer
 from cases.models import Case
 from cases.serializer import CaseSerializer
-
-##from common.custom_auth import JSONWebTokenAuthentication
-from common import serializer, swagger_params1
-from common.models import APISettings, Document, Org, Profile, User
+from common import swagger_params1
+from common.base_views import AssignedFilteredDetailView
+from common.base_views import AssignedFilteredListView
+from common.permissions import IsCreatorOrAdmin
+from common.permissions import IsOrgMember
 from common.serializer import *
-# from common.serializer import (
-#     CreateUserSerializer,
-#     PasswordChangeSerializer,
-#     RegisterOrganizationSerializer,
-# )
+from common.serializer import EmailTokenObtainPairSerializer
 from common.tasks import (
     resend_activation_link_to_user,
     send_email_to_new_user,
-    send_email_to_reset_password,
     send_email_user_delete,
 )
 from common.token_generator import account_activation_token
-
-# from rest_framework_jwt.serializers import jwt_encode_handler
-from common.utils import COUNTRIES, ROLES, jwt_payload_handler
+from common.utils import COUNTRIES
 from contacts.serializer import ContactSerializer
 from leads.models import Lead
 from leads.serializer import LeadSerializer
@@ -63,40 +43,31 @@ from opportunity.models import Opportunity
 from opportunity.serializer import OpportunitySerializer
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
-import secrets
-import string
-from rest_framework.permissions import AllowAny
-import datetime
-from rest_framework import permissions, status
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView
-from common.serializer import EmailTokenObtainPairSerializer
-from common.models import Document
-from common.models import Attachments
-from common.models import APISettings
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.permissions import IsAuthenticated
-from common.permissions import IsOrgAdmin
-import traceback
-import sys
-from django.utils import timezone
+
 
 class GetTeamsAndUsersView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """
+    Get all teams and active profiles for current organization.
+    Used for assignment dropdowns.
+
+    Permissions:
+    - Must be org member
+    """
+    permission_classes = [IsOrgMember]
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
     def get(self, request, *args, **kwargs):
-        data = {}
+        """Get teams and profiles for current org."""
         teams = Teams.objects.filter(org=request.profile.org).order_by("-id")
-        teams_data = TeamsSerializer(teams, many=True).data
-        profiles = Profile.objects.filter(is_active=True, org=request.profile.org).order_by(
-            "user__email"
-        )
-        profiles_data = ProfileSerializer(profiles, many=True).data
-        data["teams"] = teams_data
-        data["profiles"] = profiles_data
-        return Response(data)
+        profiles = Profile.objects.filter(
+            is_active=True,
+            org=request.profile.org
+        ).order_by("user__email")
+
+        return Response({
+            "teams": TeamsSerializer(teams, many=True).data,
+            "profiles": ProfileSerializer(profiles, many=True).data,
+        })
 
 class ActivateUserView(APIView):
     permission_classes = (AllowAny,)
@@ -238,21 +209,66 @@ class ActivateUserView(APIView):
             )
 
 
-class UsersListView(APIView, LimitOffsetPagination):
-    permission_classes = (IsAuthenticated, IsOrgAdmin)
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from common.permissions import IsOrgMember, IsOrgAdmin, IsSameOrg
+from django.db import transaction
+from drf_spectacular.utils import extend_schema
+import string
+import secrets
+
+
+class UsersListView(ListCreateAPIView):
+    """
+    List and create users (profiles).
+
+    Permissions:
+    - Must be org member and admin
+    """
+    serializer_class = ProfileSerializer
+    permission_classes = [IsOrgMember, IsOrgAdmin]
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        """Filter profiles to current org."""
+        queryset = Profile.objects.filter(org=self.request.profile.org).order_by("-id")
+
+        # Filter by query params
+        params = self.request.query_params
+        status_param = params.get("status", "active")
+
+        if params.get("email"):
+            queryset = queryset.filter(user__email__icontains=params.get("email"))
+        if params.get("role"):
+            queryset = queryset.filter(role=params.get("role"))
+
+        # Filter by active status
+        is_active = status_param == "active"
+        queryset = queryset.filter(user__is_active=is_active)
+
+        return queryset
+
+    @extend_schema(parameters=swagger_params1.user_list_params)
+    def get(self, request, *args, **kwargs):
+        """List users with pagination."""
+        queryset = self.get_queryset()
+        total_count = queryset.count()
+
+        results = self.paginate_queryset(queryset.distinct())
+        users = ProfileSerializer(results, many=True).data
+
+        return Response({
+            "users": users,
+            "total_count": total_count,
+            "status": request.query_params.get("status", "active"),
+        })
 
     @extend_schema(
         parameters=swagger_params1.organization_params,
         request=UserCreateSwaggerSerializer
     )
-    def post(self, request, format=None):
-        if request.profile.role != "ADMIN" and not request.user.is_superuser:
-            return Response(
-                {"error": True, "errors": "Permission Denied"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+    def post(self, request, *args, **kwargs):
         params = request.data
+
         user_serializer = CreateUserSerializer(data=params, org=request.profile.org)
         address_serializer = BillingAddressSerializer(data=params)
         profile_serializer = CreateProfileSerializer(data=params)
@@ -275,20 +291,16 @@ class UsersListView(APIView, LimitOffsetPagination):
             with transaction.atomic():
                 address_obj = address_serializer.save()
 
-                # Generate password before creating user
                 password = params.get("password")
                 if not password:
                     alphabet = string.ascii_letters + string.digits
-                    password = ''.join(secrets.choice(alphabet) for i in range(12))
+                    password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
-                # Add password to validated_data
                 user_serializer.validated_data['password'] = password
-
                 user = user_serializer.save(is_active=False)
                 user.set_password(password)
                 user.save()
 
-                # Create profile with first_name and last_name
                 Profile.objects.create(
                     user=user,
                     first_name=params.get("first_name", ""),
@@ -297,10 +309,15 @@ class UsersListView(APIView, LimitOffsetPagination):
                     role=params.get("role"),
                     address=address_obj,
                     org=request.profile.org,
-                    created_by=request.user,
+                    created_by=request.profile,
                 )
 
             send_email_to_new_user(user.id)
+
+            return Response(
+                {"error": False, "message": "User created successfully"},
+                status=status.HTTP_201_CREATED,
+            )
 
         except Exception as e:
             return Response(
@@ -308,138 +325,119 @@ class UsersListView(APIView, LimitOffsetPagination):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return Response(
-            {"error": False, "message": "User created successfully"},
-            status=status.HTTP_201_CREATED,
-        )
 
-    @extend_schema(parameters=swagger_params1.user_list_params)
-    def get(self, request, format=None):
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            return Response(
-                {"error": True, "errors": "Permission Denied"},
-                status=status.HTTP_403_FORBIDDEN,
+class UserDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete user profile.
+
+    Permissions:
+    - Must be org member and admin (or viewing self)
+    - Must be same org
+    """
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [IsOrgMember, IsSameOrg]
+
+    def get_queryset(self):
+        """Filter to current org."""
+        return super().get_queryset().filter(org=self.request.profile.org)
+
+    def check_object_permissions(self, request, obj):
+        """Check if user can access this profile."""
+        super().check_object_permissions(request, obj)
+
+        # Admin can access anyone, user can only access self
+        if (
+                request.profile.role != "ADMIN"
+                and not request.profile.is_admin
+                and request.profile.id != obj.id
+        ):
+            self.permission_denied(
+                request,
+                message="You can only view your own profile"
             )
-
-        queryset = Profile.objects.filter(org=request.profile.org).order_by("-id")
-        params = request.query_params
-        status_param = params.get("status", "active")
-
-        if params.get("email"):
-            queryset = queryset.filter(user__email__icontains=params.get("email"))
-        if params.get("role"):
-            queryset = queryset.filter(role=params.get("role"))
-
-        is_active = status_param == "active"
-        queryset = queryset.filter(user__is_active=is_active)
-
-        total_count = queryset.count()
-        results = self.paginate_queryset(queryset.distinct(), self.request, view=self)
-        users = ProfileSerializer(results, many=True).data
-
-        context = {
-            "users": users,
-            "total_count": total_count,
-            "status": status_param,
-        }
-
-        return Response(context)
-
-
-class UserDetailView(APIView):
-    permission_classes = (IsAuthenticated,IsOrgAdmin)
-
-    def get_object(self, pk):
-        profile = get_object_or_404(Profile, pk=pk)
-        return profile
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
-    def get(self, request, pk, format=None):
-        profile_obj = self.get_object(pk)
-        if (
-            self.request.profile.role != "ADMIN"
-            and not self.request.profile.is_admin
-            and self.request.profile.id != profile_obj.id
-        ):
-            return Response(
-                {"error": True, "errors": "Permission Denied"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if profile_obj.org != request.profile.org:
-            return Response(
-                {"error": True, "errors": "User company doesnot match with header...."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        assigned_data = Profile.objects.filter(org=request.profile.org, is_active=True).values(
-            "id", "user__email"
-        )
-        context = {}
-        context["profile_obj"] = ProfileSerializer(profile_obj).data
+    def get(self, request, *args, **kwargs):
+        """Get user profile with assigned data."""
+        profile_obj = self.get_object()
+
+        # Get assigned data for dropdowns
+        assigned_data = Profile.objects.filter(
+            org=request.profile.org,
+            is_active=True
+        ).values("id", "user__email")
+
+        # Get related objects
         opportunity_list = Opportunity.objects.filter(assigned_to=profile_obj)
-        context["opportunity_list"] = OpportunitySerializer(
-            opportunity_list, many=True
-        ).data
         contacts = Contact.objects.filter(assigned_to=profile_obj)
-        context["contacts"] = ContactSerializer(contacts, many=True).data
         cases = Case.objects.filter(assigned_to=profile_obj)
-        context["cases"] = CaseSerializer(cases, many=True).data
-        context["assigned_data"] = assigned_data
         comments = profile_obj.user_comments.all()
-        context["comments"] = CommentSerializer(comments, many=True).data
-        context["countries"] = COUNTRIES
-        return Response(
-            {"error": False, "data": context},
-            status=status.HTTP_200_OK,
-        )
+
+        return Response({
+            "error": False,
+            "data": {
+                "profile_obj": ProfileSerializer(profile_obj).data,
+                "opportunity_list": OpportunitySerializer(opportunity_list, many=True).data,
+                "contacts": ContactSerializer(contacts, many=True).data,
+                "cases": CaseSerializer(cases, many=True).data,
+                "assigned_data": assigned_data,
+                "comments": CommentSerializer(comments, many=True).data,
+                "countries": COUNTRIES,
+            }
+        }, status=status.HTTP_200_OK)
 
     @extend_schema(
         tags=["users"],
         parameters=swagger_params1.organization_params,
         request=UserCreateSwaggerSerializer
     )
-    def put(self, request, pk, format=None):
-        params = request.data
-        profile = self.get_object(pk)
+    def put(self, request, *args, **kwargs):
+        profile = self.get_object()
         address_obj = profile.address
+        params = request.data
 
         if (
-                self.request.profile.role != "ADMIN"
-                and not self.request.user.is_superuser
-                and self.request.profile.id != profile.id
+                request.profile.role != "ADMIN"
+                and not request.user.is_superuser
+                and request.profile.id != profile.id
         ):
             return Response(
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        if profile.org != request.profile.org:
-            return Response(
-                {"error": True, "errors": "User company does not match with header"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        serializer = CreateUserSerializer(
-            data=params, instance=profile.user, org=request.profile.org
+        user_serializer = CreateUserSerializer(
+            data=params,
+            instance=profile.user,
+            org=request.profile.org
         )
-        address_serializer = BillingAddressSerializer(data=params, instance=address_obj)
-        profile_serializer = CreateProfileSerializer(data=params, instance=profile)
+        address_serializer = BillingAddressSerializer(
+            data=params,
+            instance=address_obj
+        )
+        profile_serializer = CreateProfileSerializer(
+            data=params,
+            instance=profile
+        )
 
         errors = {}
-        if not serializer.is_valid():
-            errors["contact_errors"] = serializer.errors
+        if not user_serializer.is_valid():
+            errors["user_errors"] = user_serializer.errors
         if not address_serializer.is_valid():
             errors["address_errors"] = address_serializer.errors
         if not profile_serializer.is_valid():
             errors["profile_errors"] = profile_serializer.errors
+
         if errors:
             errors["error"] = True
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-        user = serializer.save()
+        user = user_serializer.save()
         address_obj = address_serializer.save()
         profile_obj = profile_serializer.save()
         profile_obj.address = address_obj
-        profile_obj.updated_by = request.user
+        profile_obj.updated_by = request.profile
         profile_obj.save()
 
         return Response(
@@ -447,18 +445,15 @@ class UserDetailView(APIView):
             status=status.HTTP_200_OK,
         )
 
-    @extend_schema(
-        tags=["users"],
-        parameters=swagger_params1.organization_params
-    )
-    def delete(self, request, pk, format=None):
-        if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
+    @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
+    def delete(self, request, *args, **kwargs):
+        profile = self.get_object()
+
+        if request.profile.role != "ADMIN" and not request.profile.is_admin:
             return Response(
                 {"error": True, "errors": "Permission Denied"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        profile = self.get_object(pk)
 
         if profile.id == request.profile.id:
             return Response(
@@ -471,15 +466,12 @@ class UserDetailView(APIView):
         user = profile.user
 
         Attachments.objects.filter(created_by=user).delete()
-        Document.objects.filter(created_by=profile).delete()
-        APISettings.objects.filter(created_by=profile).delete()
+        Document.objects.filter(created_by=user).delete()
+        APISettings.objects.filter(created_by=user).delete()
 
         user.delete()
 
-        send_email_user_delete.delay(
-            user_email,
-            deleted_by=deleted_by,
-        )
+        send_email_user_delete.delay(user_email, deleted_by=deleted_by)
 
         return Response(
             {
@@ -489,38 +481,42 @@ class UserDetailView(APIView):
             status=status.HTTP_200_OK
         )
 
+
 class ResendInvitationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """
+    Resend activation invitation to inactive user.
+
+    Permissions:
+    - Must be org member and admin
+    """
+    permission_classes = [IsOrgMember, IsOrgAdmin]
 
     @extend_schema(
         tags=["users"],
         parameters=swagger_params1.organization_params
     )
     def post(self, request, pk, format=None):
-        """Resend activation invitation to inactive user"""
-
-        if request.profile.role != "ADMIN" and not request.profile.is_admin:
-            return Response(
-                {"error": True, "errors": "Permission Denied"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+        """Resend activation invitation to inactive user."""
         try:
-            profile = get_object_or_404(Profile, pk=pk)
-            user = profile.user
+            # Try to get profile in current org
+            profile = Profile.objects.filter(pk=pk, org=request.profile.org).first()
 
-            if profile.org != request.profile.org:
+            if not profile:
                 return Response(
-                    {"error": True, "errors": "User company does not match"},
+                    {"error": True, "message": "User not found in this organization"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            user = profile.user
+
+            # Check if user is already active
             if user.is_active:
                 return Response(
                     {"error": True, "message": "User is already active"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Resend activation email
             resend_activation_link_to_user(user.email)
 
             return Response(
@@ -531,19 +527,15 @@ class ResendInvitationView(APIView):
                 status=status.HTTP_200_OK
             )
 
-        except Profile.DoesNotExist:
-            return Response(
-                {"error": True, "message": "User not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response(
                 {"error": True, "message": "Failed to send invitation"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
-# check_header not working
 class ApiHomeView(APIView):
 
     permission_classes = (IsAuthenticated,)
@@ -562,16 +554,13 @@ class ApiHomeView(APIView):
                 Q(assigned_to=self.request.profile) | Q(created_by=self.request.profile.user)
             )
             contacts = contacts.filter(
-                Q(assigned_to__id__in=self.request.profile)
-                | Q(created_by=self.request.profile.user)
+                Q(assigned_to=self.request.profile) | Q(created_by=self.request.profile.user)
             )
             leads = leads.filter(
-                Q(assigned_to__id__in=self.request.profile)
-                | Q(created_by=self.request.profile.user)
+                Q(assigned_to=self.request.profile) | Q(created_by=self.request.profile.user)
             ).exclude(status="closed")
             opportunities = opportunities.filter(
-                Q(assigned_to__id__in=self.request.profile)
-                | Q(created_by=self.request.profile.user)
+                Q(assigned_to=self.request.profile) | Q(created_by=self.request.profile.user)
             )
         context = {}
         context["accounts_count"] = accounts.count()
@@ -586,108 +575,103 @@ class ApiHomeView(APIView):
 
 
 class OrgProfileCreateView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """
+    Create organization and admin profile, or list user's organizations.
 
-    model1 = Org
-    model2 = Profile
-    serializer_class = OrgProfileCreateSerializer
-    profile_serializer = CreateProfileSerializer
+    POST: Create new org (or update existing profile to admin)
+    GET: List all orgs user has access to
+    """
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        description="Organization and profile Creation api",
+        description="Organization and profile creation API",
         request=OrgProfileCreateSerializer
     )
     def post(self, request, format=None):
+        """
+        Create organization and admin profile.
+        If org exists, creates/updates profile to admin.
+        """
         try:
-            print("=== OrgProfileCreateView POST START ===", file=sys.stderr)
-            print(f"User: {request.user.email}", file=sys.stderr)
-            print(f"User first_name: {getattr(request.user, 'first_name', 'N/A')}", file=sys.stderr)
-            print(f"User last_name: {getattr(request.user, 'last_name', 'N/A')}", file=sys.stderr)
-            print(f"Data: {request.data}", file=sys.stderr)
-
             data = request.data
-            data['api_key'] = secrets.token_hex(16)
-            serializer = self.serializer_class(data=data)
+            org_name = data.get('name')
 
-            if serializer.is_valid():
-                print("=== Serializer valid ===", file=sys.stderr)
-                org_obj = serializer.save()
-                print(f"=== Org created: {org_obj.id} ===", file=sys.stderr)
+            # Check if org already exists
+            existing_org = Org.objects.filter(name=org_name).first()
 
-                # Check if profile already exists for this org
-                existing_profile = self.model2.objects.filter(user=request.user, org=org_obj).first()
-
-                if existing_profile:
-                    print("=== Profile exists, updating ===", file=sys.stderr)
-                    # Update existing profile
-                    profile_obj = existing_profile
-                    profile_obj.is_organization_admin = True
-                    profile_obj.role = 'ADMIN'
-                    profile_obj.save()
-                else:
-                    print("=== Creating new profile ===", file=sys.stderr)
-                    # Create new profile with names from User model or request data
-                    first_name = data.get('first_name') or getattr(request.user, 'first_name', '') or ''
-                    last_name = data.get('last_name') or getattr(request.user, 'last_name', '') or ''
-
-                    print(f"=== Names from user: first={first_name}, last={last_name} ===", file=sys.stderr)
-
-                    # If still empty, try to get from existing profile
-                    if not first_name or not last_name:
-                        existing_user_profile = self.model2.objects.filter(user=request.user).first()
-                        if existing_user_profile:
-                            first_name = first_name or existing_user_profile.first_name
-                            last_name = last_name or existing_user_profile.last_name
-                            print(f"=== Names from existing profile: first={first_name}, last={last_name} ===",
-                                  file=sys.stderr)
-
-                    print(f"=== Final names: first={first_name}, last={last_name} ===", file=sys.stderr)
-
-                    profile_obj = self.model2.objects.create(
-                        user=request.user,
-                        org=org_obj,
-                        first_name=first_name,
-                        last_name=last_name,
-                        date_of_joining=timezone.now().date(),
-                        is_organization_admin=True,
-                        role='ADMIN'
-                    )
-                    print(f"=== Profile created: {profile_obj.id} ===", file=sys.stderr)
-
-                print("=== OrgProfileCreateView POST SUCCESS ===", file=sys.stderr)
-                return Response(
-                    {
-                        "error": False,
-                        "message": "New Org is Created.",
-                        "org": self.serializer_class(org_obj).data,
-                        "status": status.HTTP_201_CREATED,
-                    }
-                )
+            if existing_org:
+                org_obj = existing_org
             else:
-                print(f"=== Serializer errors: {serializer.errors} ===", file=sys.stderr)
-                return Response(
-                    {
-                        "error": True,
-                        "errors": serializer.errors,
-                        "status": status.HTTP_400_BAD_REQUEST,
-                    }
+                # Create new org
+                data['api_key'] = secrets.token_hex(16)
+                serializer = OrgProfileCreateSerializer(data=data)
+
+                if not serializer.is_valid():
+                    return Response(
+                        {
+                            "error": True,
+                            "errors": serializer.errors,
+                            "status": status.HTTP_400_BAD_REQUEST,
+                        }
+                    )
+
+                org_obj = serializer.save()
+
+            # Check if profile exists for this user in this org
+            existing_profile = Profile.objects.filter(user=request.user, org=org_obj).first()
+
+            if existing_profile:
+                # Update existing profile to admin
+                existing_profile.is_organization_admin = True
+                existing_profile.role = 'ADMIN'
+                existing_profile.save()
+                profile_obj = existing_profile
+            else:
+                # Create new admin profile
+                first_name = data.get('first_name') or getattr(request.user, 'first_name', '') or ''
+                last_name = data.get('last_name') or getattr(request.user, 'last_name', '') or ''
+
+                # Fallback to existing profile if names not provided
+                if not first_name or not last_name:
+                    existing_user_profile = Profile.objects.filter(user=request.user).first()
+                    if existing_user_profile:
+                        first_name = first_name or existing_user_profile.first_name
+                        last_name = last_name or existing_user_profile.last_name
+
+                profile_obj = Profile.objects.create(
+                    user=request.user,
+                    org=org_obj,
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_joining=timezone.now().date(),
+                    is_organization_admin=True,
+                    role='ADMIN'
                 )
+
+            return Response(
+                {
+                    "error": False,
+                    "message": "New Org is Created." if not existing_org else "Profile updated to ADMIN.",
+                    "org": OrgProfileCreateSerializer(org_obj).data,
+                    "status": status.HTTP_201_CREATED,
+                }
+            )
+
         except Exception as e:
-            print(f"=== EXCEPTION in OrgProfileCreateView ===", file=sys.stderr)
-            print(f"Error type: {type(e).__name__}", file=sys.stderr)
-            print(f"Error message: {str(e)}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             raise
 
     @extend_schema(
-        description="Just Pass the token, will return ORG list, associated with user"
+        description="List all organizations associated with the user"
     )
     def get(self, request, format=None):
         """
-        here we are passing profile list of the user, where org details also included
+        List all organizations the user has profiles in.
+        Returns profile details including org info and role.
         """
         profile_list = Profile.objects.filter(user=request.user)
         serializer = ShowOrganizationListSerializer(profile_list, many=True)
+
         return Response(
             {
                 "error": False,
@@ -698,324 +682,271 @@ class OrgProfileCreateView(APIView):
 
 
 class ProfileView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """
+    Get current user's profile in the specified organization.
+
+    Permissions:
+    - Must be authenticated
+    - Org header validated by middleware (sets request.profile)
+    """
+    permission_classes = [IsOrgMember]
 
     @extend_schema(parameters=swagger_params1.organization_params)
     def get(self, request, format=None):
-        org_id = request.META.get('HTTP_ORG')
-
-        profile = Profile.objects.get(user=request.user, org_id=org_id)
-
-        current_org = None
-        if org_id:
-            from common.models import Org
-            current_org = Org.objects.filter(id=org_id).first()
-
-        context = {}
-        context["user_obj"] = ProfileSerializer(profile).data
-
-        if current_org:
-            context["current_org"] = {
-                "id": str(current_org.id),
-                "name": current_org.name
+        """
+        Get user profile and org info.
+        Middleware already validated org access and set request.profile.
+        """
+        return Response({
+            "user_obj": ProfileSerializer(request.profile).data,
+            "current_org": {
+                "id": str(request.profile.org.id),
+                "name": request.profile.org.name
             }
+        }, status=status.HTTP_200_OK)
 
-        return Response(context, status=status.HTTP_200_OK)
 
-class DocumentListView(APIView, LimitOffsetPagination):
-    #authentication_classes = (CustomDualAuthentication,)
-    permission_classes = (IsAuthenticated,)
+class DocumentListView(AssignedFilteredListView):
+    """
+    List and create documents.
+    GET returns documents split by status (active/inactive) with pagination.
+    POST creates new document with file upload.
+    """
     model = Document
+    serializer_class = DocumentSerializer
+    create_serializer_class = DocumentCreateSerializer
+    pagination_class = LimitOffsetPagination
 
-    def get_context_data(self, **kwargs):
+    def filter_queryset(self, queryset):
+        """Apply search filters from query params."""
         params = self.request.query_params
-        queryset = self.model.objects.filter(org=self.request.profile.org).order_by("-id")
-        if self.request.user.is_superuser or self.request.profile.role == "ADMIN":
-            queryset = queryset
-        else:
-            if self.request.profile.documents():
-                doc_ids = self.request.profile.documents().values_list("id", flat=True)
-                shared_ids = queryset.filter(
-                    Q(status="active") & Q(shared_to__id__in=[self.request.profile.id])
-                ).values_list("id", flat=True)
-                queryset = queryset.filter(Q(id__in=doc_ids) | Q(id__in=shared_ids))
-            else:
-                queryset = queryset.filter(
-                    Q(status="active") & Q(shared_to__id__in=[self.request.profile.id])
-                )
 
-        request_post = params
-        if request_post:
-            if request_post.get("title"):
-                queryset = queryset.filter(title__icontains=request_post.get("title"))
-            if request_post.get("status"):
-                queryset = queryset.filter(status=request_post.get("status"))
+        if params.get("title"):
+            queryset = queryset.filter(title__icontains=params.get("title"))
 
-            if request_post.get("shared_to"):
-                queryset = queryset.filter(
-                    shared_to__id__in=json.loads(request_post.get("shared_to"))
-                )
+        if params.get("status"):
+            queryset = queryset.filter(status=params.get("status"))
 
-        context = {}
-        profile_list = Profile.objects.filter(is_active=True, org=self.request.profile.org)
-        if self.request.profile.role == "ADMIN" or self.request.profile.is_admin:
+        if params.get("shared_to"):
+            import json
+            try:
+                shared_to_ids = json.loads(params.get("shared_to"))
+                queryset = queryset.filter(shared_to__id__in=shared_to_ids)
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        return queryset
+
+    def get(self, request, *args, **kwargs):
+        """Custom GET with split active/inactive documents."""
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Get profiles for sharing dropdown
+        profile_list = Profile.objects.filter(is_active=True, org=request.profile.org)
+        if request.profile.role == "ADMIN" or request.profile.is_admin:
             profiles = profile_list.order_by("user__email")
         else:
             profiles = profile_list.filter(role="ADMIN").order_by("user__email")
-        search = False
-        if (
-            params.get("document_file")
-            or params.get("status")
-            or params.get("shared_to")
-        ):
-            search = True
-        context["search"] = search
 
-        queryset_documents_active = queryset.filter(status="active")
-        results_documents_active = self.paginate_queryset(
-            queryset_documents_active.distinct(), self.request, view=self
+        # Check if search is active
+        search = bool(
+            request.query_params.get("document_file") or
+            request.query_params.get("status") or
+            request.query_params.get("shared_to")
         )
-        documents_active = DocumentSerializer(results_documents_active, many=True).data
-        if results_documents_active:
-            offset = queryset_documents_active.filter(
-                id__gte=results_documents_active[-1].id
-            ).count()
-            if offset == queryset_documents_active.count():
-                offset = None
-        else:
-            offset = 0
-        context["documents_active"] = {
-            "documents_active_count": self.count,
-            "documents_active": documents_active,
-            "offset": offset,
-        }
 
-        queryset_documents_inactive = queryset.filter(status="inactive")
-        results_documents_inactive = self.paginate_queryset(
-            queryset_documents_inactive.distinct(), self.request, view=self
-        )
-        documents_inactive = DocumentSerializer(
-            results_documents_inactive, many=True
-        ).data
-        if results_documents_inactive:
-            offset = queryset_documents_inactive.filter(
-                id__gte=results_documents_active[-1].id
-            ).count()
-            if offset == queryset_documents_inactive.count():
-                offset = None
-        else:
-            offset = 0
-        context["documents_inactive"] = {
-            "documents_inactive_count": self.count,
-            "documents_inactive": documents_inactive,
-            "offset": offset,
-        }
+        # Paginate active documents
+        queryset_active = queryset.filter(status="active")
+        results_active = self.paginate_queryset(queryset_active.distinct())
+        documents_active = DocumentSerializer(results_active, many=True).data
 
-        context["users"] = ProfileSerializer(profiles, many=True).data
-        context["status_choices"] = Document.DOCUMENT_STATUS_CHOICE
-        return context
+        active_offset = None
+        if results_active:
+            offset = queryset_active.filter(id__gte=results_active[-1].id).count()
+            if offset < queryset_active.count():
+                active_offset = offset
 
-    @extend_schema(
-        tags=["documents"], parameters=swagger_params1.document_get_params
-    )
-    def get(self, request, *args, **kwargs):
-        context = self.get_context_data(**kwargs)
-        return Response(context)
+        # Paginate inactive documents
+        queryset_inactive = queryset.filter(status="inactive")
+        results_inactive = self.paginate_queryset(queryset_inactive.distinct())
+        documents_inactive = DocumentSerializer(results_inactive, many=True).data
 
-    @extend_schema(
-        tags=["documents"], parameters=swagger_params1.organization_params,request=DocumentCreateSwaggerSerializer
-    )
+        inactive_offset = None
+        if results_inactive:
+            offset = queryset_inactive.filter(id__gte=results_inactive[-1].id).count()
+            if offset < queryset_inactive.count():
+                inactive_offset = offset
+
+        return Response({
+            "search": search,
+            "documents_active": {
+                "documents_active_count": queryset_active.count(),
+                "documents_active": documents_active,
+                "offset": active_offset,
+            },
+            "documents_inactive": {
+                "documents_inactive_count": queryset_inactive.count(),
+                "documents_inactive": documents_inactive,
+                "offset": inactive_offset,
+            },
+            "users": ProfileSerializer(profiles, many=True).data,
+            "status_choices": Document.DOCUMENT_STATUS_CHOICE,
+        })
+
     def post(self, request, *args, **kwargs):
-        params = request.data
-        serializer = DocumentCreateSerializer(data=params, request_obj=request)
-        if serializer.is_valid():
-            doc = serializer.save(
-                created_by=request.profile.user,
-                org=request.profile.org,
-                document_file=request.FILES.get("document_file"),
-            )
-            if params.get("shared_to"):
-                assinged_to_list = params.get("shared_to")
-                profiles = Profile.objects.filter(
-                    id__in=assinged_to_list, org=request.profile.org, is_active=True
-                )
-                if profiles:
-                    doc.shared_to.add(*profiles)
-            if params.get("teams"):
-                teams_list = params.get("teams")
-                teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
-                if teams:
-                    doc.teams.add(*teams)
+        serializer = self.get_serializer(data=request.data, request_obj=request)
 
+        if not serializer.is_valid():
             return Response(
-                {"error": False, "message": "Document Created Successfully"},
-                status=status.HTTP_201_CREATED,
+                {"error": True, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(
-            {"error": True, "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
+
+        doc = serializer.save(
+            created_by=request.profile.user,
+            org=request.profile.org,
+            document_file=request.FILES.get("document_file"),
         )
 
-
-class DocumentDetailView(APIView):
-    #authentication_classes = (CustomDualAuthentication,)
-    permission_classes = (IsAuthenticated,)
-
-    def get_object(self, pk):
-        return Document.objects.filter(id=pk).first()
-
-    @extend_schema(
-        tags=["documents"], parameters=swagger_params1.organization_params
-    )
-    def get(self, request, pk, format=None):
-        self.object = self.get_object(pk)
-        if not self.object:
-            return Response(
-                {"error": True, "errors": "Document does not exist"},
-                status=status.HTTP_403_FORBIDDEN,
+        if request.data.get("shared_to"):
+            shared_to_list = self._parse_list_field(request.data.get("shared_to"))
+            profiles = Profile.objects.filter(
+                id__in=shared_to_list,
+                org=request.profile.org,
+                is_active=True
             )
-        if self.object.org != self.request.profile.org:
-            return Response(
-                {"error": True, "errors": "User company doesnot match with header...."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if not (
-                (self.request.profile == self.object.created_by)
-                or (self.request.profile in self.object.shared_to.all())
-            ):
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        profile_list = Profile.objects.filter(org=self.request.profile.org)
+            if profiles:
+                doc.shared_to.add(*profiles)
+
+        if request.data.get("teams"):
+            teams_list = self._parse_list_field(request.data.get("teams"))
+            teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
+            if teams:
+                doc.teams.add(*teams)
+
+        return Response(
+            {"error": False, "message": "Document Created Successfully"},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @staticmethod
+    def _parse_list_field(value):
+        """Parse list field that might come as string or list from form data."""
+        if isinstance(value, str):
+            import json
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                return [value]
+        return value
+
+
+class DocumentDetailView(AssignedFilteredDetailView):
+    """
+    Retrieve, update or delete a document.
+    Permissions handled by AssignedFilteredDetailView.
+    """
+    model = Document
+    queryset = Document.objects.select_related('created_by', 'org').prefetch_related('shared_to', 'teams')
+    serializer_class = DocumentSerializer
+    update_serializer_class = DocumentCreateSerializer
+
+    @extend_schema(tags=["documents"])
+    def get(self, request, *args, **kwargs):
+        """Get document with additional context."""
+        instance = self.get_object()
+
+        # Get profiles for sharing dropdown
+        profile_list = Profile.objects.filter(org=request.profile.org, is_active=True)
         if request.profile.role == "ADMIN" or request.user.is_superuser:
             profiles = profile_list.order_by("user__email")
         else:
             profiles = profile_list.filter(role="ADMIN").order_by("user__email")
-        context = {}
-        context.update(
-            {
-                "doc_obj": DocumentSerializer(self.object).data,
-                "file_type_code": self.object.file_type()[1],
-                "users": ProfileSerializer(profiles, many=True).data,
-            }
+
+        return Response({
+            'doc_obj': DocumentSerializer(instance).data,
+            'file_type_code': instance.file_type()[1],
+            'users': ProfileSerializer(profiles, many=True).data,
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(tags=["documents"], request=DocumentEditSwaggerSerializer)
+    def put(self, request, *args, **kwargs):
+        """Update document and manage shared_to/teams relationships."""
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+            request_obj=request
         )
-        return Response(context, status=status.HTTP_200_OK)
 
-    @extend_schema(
-        tags=["documents"], parameters=swagger_params1.organization_params
-    )
-    def delete(self, request, pk, format=None):
-        document = self.get_object(pk)
-        if not document:
+        if not serializer.is_valid():
             return Response(
-                {"error": True, "errors": "Documdnt does not exist"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if document.org != self.request.profile.org:
-            return Response(
-                {"error": True, "errors": "User company doesnot match with header...."},
-                status=status.HTTP_403_FORBIDDEN,
+                {"error": True, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if (
-                self.request.profile != document.created_by
-            ):  # or (self.request.profile not in document.shared_to.all()):
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        document.delete()
+        # Save document
+        doc = serializer.save(
+            document_file=request.FILES.get("document_file") or instance.document_file
+        )
+
+        # Update shared_to M2M
+        doc.shared_to.clear()
+        if request.data.get("shared_to"):
+            shared_to_list = self._parse_list_field(request.data.get("shared_to"))
+            profiles = Profile.objects.filter(
+                id__in=shared_to_list,
+                org=request.profile.org,
+                is_active=True
+            )
+            if profiles:
+                doc.shared_to.add(*profiles)
+
+        # Update teams M2M
+        doc.teams.clear()
+        if request.data.get("teams"):
+            teams_list = self._parse_list_field(request.data.get("teams"))
+            teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
+            if teams:
+                doc.teams.add(*teams)
+
         return Response(
-            {"error": False, "message": "Document deleted Successfully"},
+            {"error": False, "message": "Document Updated Successfully"},
             status=status.HTTP_200_OK,
         )
 
-    
-    @extend_schema(
-        tags=["documents"], parameters=swagger_params1.organization_params,request=DocumentEditSwaggerSerializer
-    )
-    def put(self, request, pk, format=None):
-        self.object = self.get_object(pk)
-        params = request.data
-        if not self.object:
-            return Response(
-                {"error": True, "errors": "Document does not exist"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if self.object.org != self.request.profile.org:
-            return Response(
-                {"error": True, "errors": "User company doesnot match with header...."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if not (
-                (self.request.profile == self.object.created_by)
-                or (self.request.profile in self.object.shared_to.all())
-            ):
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        serializer = DocumentCreateSerializer(
-            data=params, instance=self.object, request_obj=request
-        )
-        if serializer.is_valid():
-            doc = serializer.save(
-                document_file=request.FILES.get("document_file"),
-                status=params.get("status"),
-                org=request.profile.org,
-            )
-            doc.shared_to.clear()
-            if params.get("shared_to"):
-                assinged_to_list = params.get("shared_to")
-                profiles = Profile.objects.filter(
-                    id__in=assinged_to_list, org=request.profile.org, is_active=True
-                )
-                if profiles:
-                    doc.shared_to.add(*profiles)
+    @extend_schema(tags=["documents"])
+    def delete(self, request, *args, **kwargs):
+        """Delete document (permission check in perform_destroy)."""
+        return super().delete(request, *args, **kwargs)
 
-            doc.teams.clear()
-            if params.get("teams"):
-                teams_list = params.get("teams")
-                teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
-                if teams:
-                    doc.teams.add(*teams)
-            return Response(
-                {"error": False, "message": "Document Updated Successfully"},
-                status=status.HTTP_200_OK,
-            )
-        return Response(
-            {"error": True, "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    @staticmethod
+    def _parse_list_field(value):
+        """Parse list field that might come as string or list from form data."""
+        if isinstance(value, str):
+            import json
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                return [value]
+        return value
 
 
 class UserStatusView(APIView):
-    permission_classes = (IsAuthenticated,IsOrgAdmin)
+    """
+    Toggle user active/inactive status.
+
+    Permissions:
+    - Must be org member and admin
+    """
+    permission_classes = [IsOrgMember, IsOrgAdmin]
 
     @extend_schema(
         tags=["users"],
-        parameters=swagger_params1.organization_params
+        parameters=swagger_params1.organization_params,
+        request=UserUpdateStatusSwaggerSerializer
     )
     def post(self, request, pk, format=None):
-        if request.profile.role != "ADMIN" and not request.user.is_superuser:
-            return Response(
-                {"error": True, "errors": "Permission Denied"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             profile = Profile.objects.get(id=pk, org=request.profile.org)
             user = profile.user
@@ -1024,7 +955,7 @@ class UserStatusView(APIView):
             user.save()
 
             if not user.is_active:
-                profile.deactivated_by = request.user
+                profile.deactivated_by = request.profile
                 profile.deactivated_at = timezone.now()
             else:
                 profile.deactivated_by = None
@@ -1047,113 +978,159 @@ class UserStatusView(APIView):
             )
 
 
-class DomainList(APIView):
-    model = APISettings
-    permission_classes = (IsAuthenticated,)
+class DomainList(ListCreateAPIView):
+    """
+    List and create API settings.
 
-    @extend_schema(
-        tags=["Settings"],parameters=swagger_params1.organization_params
-    )
+    Permissions:
+    - Must be org member
+    - All members can create API settings
+    """
+    queryset = APISettings.objects.all()
+    serializer_class = APISettingsListSerializer
+    permission_classes = [IsOrgMember]
+
+    def get_queryset(self):
+        """Filter API settings to current org only."""
+        return super().get_queryset().filter(org=self.request.profile.org)
+
+    @extend_schema(tags=["Settings"])
     def get(self, request, *args, **kwargs):
-        api_settings = APISettings.objects.filter(org=request.profile.org)
-        users = Profile.objects.filter(is_active=True, org=request.profile.org).order_by(
-            "user__email"
-        )
-        return Response(
-            {
-                "error": False,
-                "api_settings": APISettingsListSerializer(api_settings, many=True).data,
-                "users": ProfileSerializer(users, many=True).data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        """List API settings with users for assignment dropdown."""
+        api_settings = self.get_queryset()
+        users = Profile.objects.filter(
+            is_active=True,
+            org=request.profile.org
+        ).order_by("user__email")
 
-    @extend_schema(
-        tags=["Settings"],parameters=swagger_params1.organization_params, request=APISettingsSwaggerSerializer
-    )
+        return Response({
+            "error": False,
+            "api_settings": APISettingsListSerializer(api_settings, many=True).data,
+            "users": ProfileSerializer(users, many=True).data,
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(tags=["Settings"], request=APISettingsSwaggerSerializer)
     def post(self, request, *args, **kwargs):
-        params = request.data
-        assign_to_list = []
-        if params.get("lead_assigned_to"):
-            assign_to_list = params.get("lead_assigned_to")
-        serializer = APISettingsSerializer(data=params)
-        if serializer.is_valid():
-            settings_obj = serializer.save(created_by=request.profile.user, org=request.profile.org)
-            if params.get("tags"):
-                tags = params.get("tags")
-                for tag in tags:
-                    tag_obj = Tags.objects.filter(name=tag).first()
-                    if not tag_obj:
-                        tag_obj = Tags.objects.create(name=tag)
-                    settings_obj.tags.add(tag_obj)
-            if assign_to_list:
-                settings_obj.lead_assigned_to.add(*assign_to_list)
+        serializer = APISettingsSerializer(data=request.data)
+
+        if not serializer.is_valid():
             return Response(
-                {"error": False, "message": "API key added sucessfully"},
-                status=status.HTTP_201_CREATED,
+                {"error": True, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        settings_obj = serializer.save(
+            created_by=request.profile.user,
+            org=request.profile.org
+        )
+
+        if request.data.get("tags"):
+            for tag_name in request.data.get("tags"):
+                tag_obj, _ = Tags.objects.get_or_create(name=tag_name)
+                settings_obj.tags.add(tag_obj)
+
+        if request.data.get("lead_assigned_to"):
+            assign_to_list = request.data.get("lead_assigned_to")
+            if isinstance(assign_to_list, str):
+                import json
+                try:
+                    assign_to_list = json.loads(assign_to_list)
+                except (json.JSONDecodeError, ValueError):
+                    assign_to_list = [assign_to_list]
+
+            profiles = Profile.objects.filter(
+                id__in=assign_to_list,
+                org=request.profile.org,
+                is_active=True
+            )
+            if profiles:
+                settings_obj.lead_assigned_to.add(*profiles)
+
         return Response(
-            {"error": True, "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": False, "message": "API setting Created Successfully"},
+            status=status.HTTP_201_CREATED,
         )
 
 
-class DomainDetailView(APIView):
-    model = APISettings
-    #authentication_classes = (CustomDualAuthentication,)
-    permission_classes = (IsAuthenticated,)
+class DomainDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete API setting.
 
-    @extend_schema(
-        tags=["Settings"],parameters=swagger_params1.organization_params
-    )
-    def get(self, request, pk, format=None):
-        api_setting = self.get_object(pk)
+    Permissions:
+    - Must be org member
+    - Must be same org
+    - Can access if: creator or admin
+    """
+    queryset = APISettings.objects.all()
+    serializer_class = APISettingsListSerializer
+    permission_classes = [IsOrgMember, IsSameOrg, IsCreatorOrAdmin]
+
+    def get_queryset(self):
+        """Filter to current org only."""
+        return super().get_queryset().filter(org=self.request.profile.org)
+
+    @extend_schema(tags=["Settings"])
+    def get(self, request, *args, **kwargs):
+        """Get API setting details."""
+        instance = self.get_object()
+        return Response({
+            "error": False,
+            "api_settings": APISettingsListSerializer(instance).data,
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(tags=["Settings"], request=APISettingsSwaggerSerializer)
+    def put(self, request, *args, **kwargs):
+        """Update API setting with tags and lead assignments."""
+        instance = self.get_object()
+        serializer = APISettingsSerializer(data=request.data, instance=instance)
+
+        if not serializer.is_valid():
+            return Response(
+                {"error": True, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update API setting
+        api_setting = serializer.save()
+
+        # Clear and update tags
+        api_setting.tags.clear()
+        if request.data.get("tags"):
+            for tag_name in request.data.get("tags"):
+                tag_obj, _ = Tags.objects.get_or_create(name=tag_name)
+                api_setting.tags.add(tag_obj)
+
+        # Clear and update lead_assigned_to
+        api_setting.lead_assigned_to.clear()
+        if request.data.get("lead_assigned_to"):
+            assign_to_list = request.data.get("lead_assigned_to")
+            if isinstance(assign_to_list, str):
+                import json
+                try:
+                    assign_to_list = json.loads(assign_to_list)
+                except (json.JSONDecodeError, ValueError):
+                    assign_to_list = [assign_to_list]
+
+            profiles = Profile.objects.filter(
+                id__in=assign_to_list,
+                org=request.profile.org,
+                is_active=True
+            )
+            if profiles:
+                api_setting.lead_assigned_to.add(*profiles)
+
         return Response(
-            {"error": False, "domain": APISettingsListSerializer(api_setting).data},
+            {"error": False, "message": "API setting Updated Successfully"},
             status=status.HTTP_200_OK,
         )
 
-    @extend_schema(
-        tags=["Settings"],parameters=swagger_params1.organization_params, request=APISettingsSwaggerSerializer
-    )
-    def put(self, request, pk, **kwargs):
-        api_setting = self.get_object(pk)
-        params = request.data
-        assign_to_list = []
-        if params.get("lead_assigned_to"):
-            assign_to_list = params.get("lead_assigned_to")
-        serializer = APISettingsSerializer(data=params, instance=api_setting)
-        if serializer.is_valid():
-            api_setting = serializer.save()
-            api_setting.tags.clear()
-            api_setting.lead_assigned_to.clear()
-            if params.get("tags"):
-                tags = params.get("tags")
-                for tag in tags:
-                    tag_obj = Tags.objects.filter(name=tag).first()
-                    if not tag_obj:
-                        tag_obj = Tags.objects.create(name=tag)
-                    api_setting.tags.add(tag_obj)
-            if assign_to_list:
-                api_setting.lead_assigned_to.add(*assign_to_list)
-            return Response(
-                {"error": False, "message": "API setting Updated sucessfully"},
-                status=status.HTTP_200_OK,
-            )
+    @extend_schema(tags=["Settings"])
+    def delete(self, request, *args, **kwargs):
+        """Delete API setting."""
+        instance = self.get_object()
+        instance.delete()
         return Response(
-            {"error": True, "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    @extend_schema(
-        tags=["Settings"],parameters=swagger_params1.organization_params
-    )
-    def delete(self, request, pk, **kwargs):
-        api_setting = self.get_object(pk)
-        if api_setting:
-            api_setting.delete()
-        return Response(
-            {"error": False, "message": "API setting deleted sucessfully"},
+            {"error": False, "message": "API setting Deleted Successfully"},
             status=status.HTTP_200_OK,
         )
 

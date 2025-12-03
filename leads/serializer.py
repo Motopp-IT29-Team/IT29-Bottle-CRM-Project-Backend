@@ -199,19 +199,12 @@ class LeadCreateSerializer(serializers.ModelSerializer):
 
     def validate_account_name(self, account_name):
         if self.instance:
-            if (
-                    Account.objects.filter(name__iexact=account_name, org=self.org)
-                            .exclude(id=self.instance.id)
-                            .exists()
-            ):
-                raise serializers.ValidationError(
-                    "Account already exists with this name"
-                )
-        else:
-            if Account.objects.filter(name__iexact=account_name, org=self.org).exists():
-                raise serializers.ValidationError(
-                    "Account already exists with this name"
-                )
+            return account_name
+
+        if Account.objects.filter(name__iexact=account_name, org=self.org).exists():
+            raise serializers.ValidationError(
+                "Account already exists with this name"
+            )
         return account_name
 
     def validate_title(self, title):
