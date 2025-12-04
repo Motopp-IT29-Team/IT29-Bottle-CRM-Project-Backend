@@ -91,7 +91,7 @@ class LeadListView(APIView, LimitOffsetPagination):
             if params.get("email"):
                 queryset = queryset.filter(email__icontains=params.get("email"))
         context = {}
-        queryset_open = queryset.exclude(status="closed")
+        queryset_open = queryset.exclude(status="closed").exclude(status="converted")
         results_leads_open = self.paginate_queryset(
             queryset_open.distinct(), self.request, view=self
         )
@@ -111,7 +111,7 @@ class LeadListView(APIView, LimitOffsetPagination):
             "offset": offset,
         }
 
-        queryset_close = queryset.filter(status="closed")
+        queryset_close = queryset.filter(status="converted")
         results_leads_close = self.paginate_queryset(
             queryset_close.distinct(), self.request, view=self
         )
