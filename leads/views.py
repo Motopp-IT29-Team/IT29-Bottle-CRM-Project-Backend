@@ -33,8 +33,12 @@ from leads.serializer import (
     LeadDetailEditSwaggerSerializer,
     LeadCommentEditSwaggerSerializer,
     CreateLeadFromSiteSwaggerSerializer,
-    LeadUploadSwaggerSerializer
+    LeadUploadSwaggerSerializer,
+    LeadConversionRequestSerializer,
+    LeadConversionResponseSerializer,
+    LeadDuplicateCheckResponseSerializer,
 )
+from leads.services import LeadConversionService, LeadConversionError
 from leads.tasks import (
     create_lead_from_file,
     send_email_to_assigned_user,
@@ -52,7 +56,6 @@ class LeadListView(APIView, LimitOffsetPagination):
         params = self.request.query_params
         queryset = (
             self.model.objects.filter(org=self.request.profile.org)
-            .exclude(status="converted")
             .select_related("created_by")
             .prefetch_related( 
                 "tags",
@@ -940,3 +943,133 @@ class CompanyDetail(OrgFilteredDetailView):
             {"error": False, 'message': 'Deleted successfully'},
             status=status.HTTP_200_OK,
         )
+
+
+# ============================================
+# Lead Conversion Views
+# ============================================
+
+class LeadCheckDuplicatesView(APIView):
+    """
+    Check for potential duplicate accounts and contacts before lead conversion.
+    
+    Returns matching accounts and contacts based on lead's email, phone, and company name.
+    """
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["Lead Conversion"],
+        description="Check for potential duplicates before converting a lead",
+        parameters=swagger_params1.organization_params,
+        responses={200: LeadDuplicateCheckResponseSerializer}
+    )
+    def get(self, request, pk, *args, **kwargs):
+        """Check for duplicate accounts and contacts."""
+        try:
+            lead = Lead.objects.get(pk=pk, org=request.profile.org)
+        except Lead.DoesNotExist:
+            return Response(
+                {"error": True, "message": "Lead not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        service = LeadConversionService(
+            lead=lead,
+            user=request.user,
+            org=request.profile.org
+        )
+        
+        duplicates = service.check_duplicates()
+        
+        return Response({
+            "error": False,
+            "data": duplicates
+        }, status=status.HTTP_200_OK)
+
+
+class LeadConvertView(APIView):
+    """
+    Convert a lead into Account, Contact, and Opportunity.
+    
+    This endpoint performs an atomic conversion that:
+    1. Creates or links to an Account
+    2. Creates or links to a Contact
+    3. Optionally creates an Opportunity
+    4. Marks the lead as converted (read-only)
+    
+    All operations are performed in a single transaction - if any step fails,
+    all changes are rolled back.
+    """
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["Lead Conversion"],
+        description="Convert a lead to Account, Contact, and Opportunity",
+        parameters=swagger_params1.organization_params,
+        request=LeadConversionRequestSerializer,
+        responses={
+            200: LeadConversionResponseSerializer,
+            400: None,
+            404: None
+        }
+    )
+    def post(self, request, pk, *args, **kwargs):
+        """Convert the lead."""
+        # Get the lead
+        try:
+            lead = Lead.objects.get(pk=pk, org=request.profile.org)
+        except Lead.DoesNotExist:
+            return Response(
+                {"error": True, "message": "Lead not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Validate request data
+        serializer = LeadConversionRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": True, "message": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Perform conversion
+        service = LeadConversionService(
+            lead=lead,
+            user=request.user,
+            org=request.profile.org
+        )
+
+        try:
+            result = service.convert(
+                account_options=serializer.validated_data.get('account'),
+                contact_options=serializer.validated_data.get('contact'),
+                opportunity_options=serializer.validated_data.get('opportunity')
+            )
+
+            response_data = {
+                'success': True,
+                'message': 'Lead converted successfully',
+                'lead': result.get('lead'),
+                'account': result.get('account'),
+                'contact': result.get('contact'),
+                'opportunity': result.get('opportunity')
+            }
+            
+            response_serializer = LeadConversionResponseSerializer(response_data)
+            
+            return Response({
+                "error": False,
+                "message": "Lead converted successfully",
+                "data": response_serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except LeadConversionError as e:
+            return Response(
+                {"error": True, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": True, "message": f"Conversion failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

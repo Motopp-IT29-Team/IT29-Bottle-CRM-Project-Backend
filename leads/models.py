@@ -20,7 +20,6 @@ from common.utils import (
     TIMEFRAME_CHOICES,
     return_complete_address,
 )
-from contacts.models import Contact
 from teams.models import Teams
 
 
@@ -69,7 +68,7 @@ class Lead(BaseModel):
     is_active = models.BooleanField(default=False)
     enquiry_type = models.CharField(max_length=255, blank=True, null=True)
     tags = models.ManyToManyField(Tags, blank=True)
-    contacts = models.ManyToManyField(Contact, related_name="lead_contacts")
+    contacts = models.ManyToManyField('contacts.Contact', related_name="lead_contacts")
     created_from_site = models.BooleanField(default=False)
     teams = models.ManyToManyField(Teams, related_name="lead_teams")
     org = models.ForeignKey(
@@ -95,6 +94,42 @@ class Lead(BaseModel):
     budget_range = models.CharField(max_length=50, choices=BUDGET_CHOICES, blank=True, null=True)
     decision_timeframe = models.CharField(max_length=50, choices=TIMEFRAME_CHOICES, blank=True, null=True)
     do_not_call = models.BooleanField(default=False)
+    
+    # Conversion tracking fields
+    is_converted = models.BooleanField(default=False, help_text="Whether this lead has been converted")
+    converted_at = models.DateTimeField(null=True, blank=True, help_text="When the lead was converted")
+    converted_by = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="converted_leads",
+        help_text="User who converted this lead"
+    )
+    converted_account = models.ForeignKey(
+        'accounts.Account',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="converted_from_leads",
+        help_text="Account created from this lead"
+    )
+    converted_contact = models.ForeignKey(
+        'contacts.Contact',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="converted_from_leads",
+        help_text="Contact created from this lead"
+    )
+    converted_opportunity = models.ForeignKey(
+        'opportunity.Opportunity',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="converted_from_leads",
+        help_text="Opportunity created from this lead"
+    )
 
     class Meta:
         verbose_name = "Lead"

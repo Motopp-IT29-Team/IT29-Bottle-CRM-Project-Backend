@@ -121,6 +121,7 @@ LEAD_STATUS = (
     ("qualified", "Qualified"),
     ("unqualified", "Unqualified"),
     ("on hold", "On Hold"),
+    ("converted", "Converted"),
 )
 
 
