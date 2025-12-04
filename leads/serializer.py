@@ -263,7 +263,7 @@ class LeadCreateSwaggerSerializer(serializers.ModelSerializer):
                   "opportunity_amount", "website",
                   "description", "teams", "assigned_to", "contacts", "status", "source", "address_line", "street",
                   "city", "state", "postcode",
-                  "country", "tags", "company", "probability", "industry", "skype_ID"]
+                  "country", "tags", "company", "probability", "industry"]
 
 
 class CreateLeadFromSiteSwaggerSerializer(serializers.Serializer):
