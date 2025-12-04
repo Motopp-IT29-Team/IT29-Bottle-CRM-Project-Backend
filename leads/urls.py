@@ -13,6 +13,9 @@ urlpatterns = [
     path("company/<str:pk>/", views.CompanyDetail.as_view()),
     path("<str:pk>/attachments/", views.LeadAttachmentView.as_view()),
     path("attachments/<str:pk>/", views.LeadAttachmentView.as_view()),
+    # Lead Conversion endpoints
+    path("<str:pk>/convert/", views.LeadConvertView.as_view(), name="lead_convert"),
+    path("<str:pk>/check-duplicates/", views.LeadCheckDuplicatesView.as_view(), name="lead_check_duplicates"),
     path("<str:pk>/", views.LeadDetailView.as_view()),
     path("", views.LeadListView.as_view()),
 ]

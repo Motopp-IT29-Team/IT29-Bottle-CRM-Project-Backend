@@ -288,3 +288,88 @@ class LeadCommentEditSwaggerSerializer(serializers.Serializer):
 
 class LeadUploadSwaggerSerializer(serializers.Serializer):
     leads_file = serializers.FileField()
+
+
+# ============================================
+# Lead Conversion Serializers
+# ============================================
+
+class AccountOptionSerializer(serializers.Serializer):
+    """Options for account during lead conversion"""
+    action = serializers.ChoiceField(choices=['create', 'link'], default='create')
+    existing_id = serializers.UUIDField(required=False, allow_null=True)
+    name = serializers.CharField(required=False, max_length=64)
+
+
+class ContactOptionSerializer(serializers.Serializer):
+    """Options for contact during lead conversion"""
+    action = serializers.ChoiceField(choices=['create', 'link'], default='create')
+    existing_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class OpportunityOptionSerializer(serializers.Serializer):
+    """Options for opportunity during lead conversion"""
+    create = serializers.BooleanField(default=True)
+    name = serializers.CharField(required=False, max_length=64)
+    stage = serializers.CharField(required=False, default='QUALIFICATION')
+    amount = serializers.DecimalField(required=False, max_digits=12, decimal_places=2, allow_null=True)
+    close_date = serializers.DateField(required=False, allow_null=True)
+
+
+class LeadConversionRequestSerializer(serializers.Serializer):
+    """Request serializer for lead conversion"""
+    account = AccountOptionSerializer(required=False)
+    contact = ContactOptionSerializer(required=False)
+    opportunity = OpportunityOptionSerializer(required=False)
+
+    def validate(self, data):
+        account_data = data.get('account', {})
+        contact_data = data.get('contact', {})
+        
+        # Validate account link option
+        if account_data.get('action') == 'link' and not account_data.get('existing_id'):
+            raise serializers.ValidationError({
+                'account': 'existing_id is required when action is "link"'
+            })
+        
+        # Validate contact link option
+        if contact_data.get('action') == 'link' and not contact_data.get('existing_id'):
+            raise serializers.ValidationError({
+                'contact': 'existing_id is required when action is "link"'
+            })
+        
+        return data
+
+
+class LeadConversionResponseSerializer(serializers.Serializer):
+    """Response serializer for lead conversion"""
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = serializers.SerializerMethodField()
+
+    def get_data(self, obj):
+        # Import here to avoid circular imports
+        from accounts.serializer import AccountSerializer
+        from opportunity.serializer import OpportunitySerializer
+        
+        return {
+            'lead': LeadSerializer(obj.get('lead')).data if obj.get('lead') else None,
+            'account': AccountSerializer(obj.get('account')).data if obj.get('account') else None,
+            'contact': ContactSerializer(obj.get('contact')).data if obj.get('contact') else None,
+            'opportunity': OpportunitySerializer(obj.get('opportunity')).data if obj.get('opportunity') else None,
+        }
+
+
+class DuplicateMatchSerializer(serializers.Serializer):
+    """Serializer for duplicate match results"""
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    email = serializers.EmailField(required=False, allow_null=True)
+    match_field = serializers.CharField()
+    match_score = serializers.FloatField(default=1.0)
+
+
+class LeadDuplicateCheckResponseSerializer(serializers.Serializer):
+    """Response serializer for duplicate check"""
+    account_matches = DuplicateMatchSerializer(many=True)
+    contact_matches = DuplicateMatchSerializer(many=True)
