@@ -56,7 +56,6 @@ class LeadListView(APIView, LimitOffsetPagination):
         params = self.request.query_params
         queryset = (
             self.model.objects.filter(org=self.request.profile.org)
-            .exclude(status="converted")
             .select_related("created_by")
             .prefetch_related( 
                 "tags",
