@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt import views as jwt_views
 
 from common import views
-from common.views import EmailLoginView
+from common.views import EmailLoginView, LogoutView, LogOrgSelectionView
 
 app_name = "api_common"
 
@@ -12,6 +12,8 @@ urlpatterns = [
 
     # email + password login (SimpleJWT)
     path("auth/login/", EmailLoginView.as_view(), name="email_login"),
+    path("auth/logout/", LogoutView.as_view(), name="logout"),
+    path("auth/log-org-selection/", LogOrgSelectionView.as_view(), name="log_org_selection"),
 
     path(
         "auth/refresh-token/",
@@ -32,4 +34,5 @@ urlpatterns = [
     path("api-settings/", views.DomainList.as_view()),
     path("api-settings/<str:pk>/", views.DomainDetailView.as_view()),
     path("user/<str:pk>/status/", views.UserStatusView.as_view()),
+    path("activity-logs/", views.ActivityLogListView.as_view()),
 ]

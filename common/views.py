@@ -1186,6 +1186,7 @@ class GoogleLoginView(APIView):
         response['refresh_token'] = str(token)
         response['user_id'] = user.id
 
+        # LOGIN is now logged when user selects an organization (LogOrgSelectionView)
         return Response(response)
 
 
@@ -1198,3 +1199,159 @@ class EmailLoginView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
     authentication_classes = []  # public
     permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get("email", "").lower().strip()
+        
+        response = super().post(request, *args, **kwargs)
+        
+        # Log successful login
+        if response.status_code == 200 and email:
+            from common.models import ActivityLog
+            try:
+                user = User.objects.get(email=email)
+                profile = Profile.objects.filter(user=user, is_active=True).first()
+                if profile:
+                    ActivityLog.objects.create(
+                        user=user,
+                        user_email=user.email,
+                        user_role=profile.role,
+                        org=profile.org,
+                        action="LOGIN",
+                        entity_type="User",
+                        entity_name="Email Login",
+                    )
+            except Exception as e:
+                pass  # Don't break login if logging fails
+        
+        return response
+
+
+class LogoutView(APIView):
+    """
+    POST /api/auth/logout/
+    Logs the user logout event.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Auth"], parameters=swagger_params1.organization_params)
+    def post(self, request, *args, **kwargs):
+        from common.models import ActivityLog
+        
+        # Log the logout
+        ActivityLog.objects.create(
+            user=request.user,
+            user_email=request.user.email,
+            user_role=request.profile.role,
+            org=request.profile.org,
+            action="LOGOUT",
+            entity_type="User",
+            entity_name="User Logout",
+        )
+        
+        return Response(
+            {"error": False, "message": "Logged out successfully"},
+            status=status.HTTP_200_OK,
+        )
+
+
+class LogOrgSelectionView(APIView):
+    """
+    POST /api/auth/log-org-selection/
+    Logs when a user selects/switches to an organization.
+    This serves as the LOGIN event for that org.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(tags=["Auth"], parameters=swagger_params1.organization_params)
+    def post(self, request, *args, **kwargs):
+        from common.models import ActivityLog
+        
+        # Log the org selection as LOGIN
+        ActivityLog.objects.create(
+            user=request.user,
+            user_email=request.user.email,
+            user_role=request.profile.role,
+            org=request.profile.org,
+            action="LOGIN",
+            entity_type="User",
+            entity_name="Organization Login",
+        )
+        
+        return Response(
+            {"error": False, "message": "Login logged successfully"},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ActivityLogListView(APIView, LimitOffsetPagination):
+    """
+    List activity logs for the current organization.
+    Admin-only access. Supports filtering and pagination.
+    
+    Query Parameters:
+    - offset: Pagination offset
+    - limit: Number of records per page
+    - user: Filter by user email (partial match)
+    - action: Filter by action type (LOGIN, CREATE, UPDATE, DELETE)
+    - entity_type: Filter by entity type (Lead, Contact, Account, etc.)
+    - date_from: Filter logs from this date (YYYY-MM-DD)
+    - date_to: Filter logs until this date (YYYY-MM-DD)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(tags=["Activity Log"], parameters=swagger_params1.organization_params)
+    def get(self, request, *args, **kwargs):
+        # Check admin permission
+        if request.profile.role != "ADMIN" and not request.user.is_superuser:
+            return Response(
+                {"error": True, "message": "Only admins can view activity logs"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        from common.models import ActivityLog
+        
+        # Base queryset filtered by org
+        queryset = ActivityLog.objects.filter(org=request.profile.org)
+        
+        # Apply filters
+        params = request.query_params
+        
+        if params.get("user"):
+            queryset = queryset.filter(user_email__icontains=params.get("user"))
+        
+        if params.get("action"):
+            queryset = queryset.filter(action=params.get("action"))
+        
+        if params.get("entity_type"):
+            queryset = queryset.filter(entity_type=params.get("entity_type"))
+        
+        if params.get("date_from"):
+            try:
+                date_from = datetime.datetime.strptime(params.get("date_from"), "%Y-%m-%d")
+                queryset = queryset.filter(created_at__gte=date_from)
+            except ValueError:
+                pass
+        
+        if params.get("date_to"):
+            try:
+                date_to = datetime.datetime.strptime(params.get("date_to"), "%Y-%m-%d")
+                date_to = date_to + datetime.timedelta(days=1)  # Include the end date
+                queryset = queryset.filter(created_at__lt=date_to)
+            except ValueError:
+                pass
+        
+        # Get total count before pagination
+        total_count = queryset.count()
+        
+        # Paginate
+        results = self.paginate_queryset(queryset, request, view=self)
+        
+        # Serialize
+        serializer = ActivityLogSerializer(results, many=True)
+        
+        return Response({
+            "error": False,
+            "logs": serializer.data,
+            "total_count": total_count,
+        })

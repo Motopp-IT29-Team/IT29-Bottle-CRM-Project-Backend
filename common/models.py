@@ -545,3 +545,83 @@ class APISettings(BaseModel):
         if not self.apikey or self.apikey is None or self.apikey == "":
             self.apikey = generate_key()
         super().save(*args, **kwargs)
+
+
+# Activity Log Actions
+ACTIVITY_ACTIONS = (
+    ("LOGIN", "Login"),
+    ("LOGOUT", "Logout"),
+    ("CREATE", "Create"),
+    ("UPDATE", "Update"),
+    ("DELETE", "Delete"),
+    ("VIEW", "View"),
+)
+
+# Activity Log Entity Types
+ACTIVITY_ENTITIES = (
+    ("Lead", "Lead"),
+    ("Contact", "Contact"),
+    ("Account", "Account"),
+    ("Opportunity", "Opportunity"),
+    ("Case", "Case"),
+    ("User", "User"),
+    ("System", "System"),
+)
+
+
+class ActivityLog(models.Model):
+    """
+    Activity Log model to track user actions in the system.
+    This model is read-only after creation to ensure audit integrity.
+    """
+    id = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, db_index=True, primary_key=True
+    )
+    
+    # Who performed the action
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="activity_logs"
+    )
+    user_email = models.EmailField(blank=True, default="")  # Store email for reference even if user deleted
+    user_role = models.CharField(max_length=50, blank=True, default="")
+    
+    # Organization (for multi-tenancy filtering)
+    org = models.ForeignKey(
+        Org,
+        on_delete=models.CASCADE,
+        related_name="activity_logs"
+    )
+    
+    # Action details
+    action = models.CharField(max_length=20, choices=ACTIVITY_ACTIONS)
+    entity_type = models.CharField(max_length=50, choices=ACTIVITY_ENTITIES)
+    entity_id = models.UUIDField(null=True, blank=True)
+    entity_name = models.CharField(max_length=255, blank=True, default="")
+    
+    # Additional context (store changes, etc.)
+    details = models.JSONField(default=dict, blank=True)
+    
+    # Timestamp
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Activity Log"
+        verbose_name_plural = "Activity Logs"
+        db_table = "activity_log"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["org", "-created_at"]),
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["action"]),
+            models.Index(fields=["entity_type"]),
+        ]
+    
+    def __str__(self):
+        return f"{self.user_email} - {self.action} - {self.entity_type} - {self.created_at}"
+    
+    @property
+    def created_on_arrow(self):
+        return arrow.get(self.created_at).humanize()

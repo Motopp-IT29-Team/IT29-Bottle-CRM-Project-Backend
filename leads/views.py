@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Account, Tags
+from common.activity_logger import log_activity
 from common.base_views import OrgFilteredListCreateView, OrgFilteredDetailView
 from common.models import APISettings, Attachments, Comment, Profile
 from common.models import User
@@ -46,7 +47,6 @@ from leads.tasks import (
 )
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
-
 
 class LeadListView(APIView, LimitOffsetPagination):
     model = Lead
@@ -252,6 +252,15 @@ class LeadListView(APIView, LimitOffsetPagination):
                         recipients,
                         lead_obj.id,
                     )
+                # Log lead creation and conversion
+                log_activity(
+                    request,
+                    action="CREATE",
+                    entity_type="Lead",
+                    entity_id=lead_obj.id,
+                    entity_name=lead_obj.title,
+                    details={"converted_to_account": True, "account_id": str(account_object.id)},
+                )
                 return Response(
                     {
                         "error": False,
@@ -259,6 +268,14 @@ class LeadListView(APIView, LimitOffsetPagination):
                     },
                     status=status.HTTP_200_OK,
                 )
+            # Log lead creation
+            log_activity(
+                request,
+                action="CREATE",
+                entity_type="Lead",
+                entity_id=lead_obj.id,
+                entity_name=lead_obj.title,
+            )
             return Response(
                 {"error": False, "message": "Lead Created Successfully"},
                 status=status.HTTP_200_OK,
@@ -534,6 +551,15 @@ class LeadDetailView(APIView):
                     comment.account = account_object
                     comment.save()
                 account_object.save()
+                # Log lead conversion
+                log_activity(
+                    request,
+                    action="UPDATE",
+                    entity_type="Lead",
+                    entity_id=lead_obj.id,
+                    entity_name=lead_obj.title,
+                    details={"converted_to_account": True, "account_id": str(account_object.id)},
+                )
                 return Response(
                     {
                         "error": False,
@@ -541,6 +567,14 @@ class LeadDetailView(APIView):
                     },
                     status=status.HTTP_200_OK,
                 )
+            # Log lead update
+            log_activity(
+                request,
+                action="UPDATE",
+                entity_type="Lead",
+                entity_id=lead_obj.id,
+                entity_name=lead_obj.title,
+            )
             return Response(
                 {"error": False, "message": "Lead updated Successfully"},
                 status=status.HTTP_200_OK,
@@ -559,7 +593,18 @@ class LeadDetailView(APIView):
             or request.profile.user
              == self.object.created_by
         ) and self.object.org == request.profile.org:
+            # Capture entity info before deletion
+            entity_id = self.object.id
+            entity_name = self.object.title
             self.object.delete()
+            # Log lead deletion
+            log_activity(
+                request,
+                action="DELETE",
+                entity_type="Lead",
+                entity_id=entity_id,
+                entity_name=entity_name,
+            )
             return Response(
                 {"error": False, "message": "Lead deleted Successfully"},
                 status=status.HTTP_200_OK,
@@ -1045,6 +1090,30 @@ class LeadConvertView(APIView):
                 contact_options=serializer.validated_data.get('contact'),
                 opportunity_options=serializer.validated_data.get('opportunity')
             )
+
+            # Log the lead conversion
+            from common.models import ActivityLog
+            try:
+                account_obj = result.get('account')
+                contact_obj = result.get('contact')
+                opportunity_obj = result.get('opportunity')
+                ActivityLog.objects.create(
+                    user=request.user,
+                    user_email=request.user.email,
+                    user_role=request.profile.role,
+                    org=request.profile.org,
+                    action="CONVERT",
+                    entity_type="Lead",
+                    entity_id=str(lead.id),
+                    entity_name=lead.title or f"{lead.first_name} {lead.last_name}",
+                    details={
+                        "account_id": str(account_obj.id) if account_obj else '',
+                        "contact_id": str(contact_obj.id) if contact_obj else '',
+                        "opportunity_id": str(opportunity_obj.id) if opportunity_obj else '',
+                    },
+                )
+            except Exception as log_error:
+                pass  # Don't break conversion if logging fails
 
             response_data = {
                 'success': True,
