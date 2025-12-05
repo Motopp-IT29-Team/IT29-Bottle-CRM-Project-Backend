@@ -444,3 +444,17 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         if "email" in attrs and "username" not in attrs:
             attrs["username"] = attrs["email"]
         return super().validate(attrs)
+
+
+class ActivityLogSerializer(serializers.Serializer):
+    """Serializer for ActivityLog model - read only."""
+    id = serializers.UUIDField(read_only=True)
+    user_email = serializers.EmailField(read_only=True)
+    user_role = serializers.CharField(read_only=True)
+    action = serializers.CharField(read_only=True)
+    entity_type = serializers.CharField(read_only=True)
+    entity_id = serializers.UUIDField(read_only=True, allow_null=True)
+    entity_name = serializers.CharField(read_only=True)
+    details = serializers.JSONField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    created_on_arrow = serializers.CharField(read_only=True)
