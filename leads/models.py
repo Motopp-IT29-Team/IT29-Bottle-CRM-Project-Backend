@@ -60,7 +60,13 @@ class Lead(BaseModel):
     country = models.CharField(max_length=3, choices=COUNTRIES, blank=True, null=True)
     website = models.CharField(_("Website"), max_length=255, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
-    assigned_to = models.ManyToManyField(Profile, related_name="lead_assigned_users")
+    assigned_to = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lead_assigned_users"
+    )
     account_name = models.CharField(max_length=255, null=True, blank=True)
     opportunity_amount = models.DecimalField(
         _("Opportunity Amount"), decimal_places=2, max_digits=12, blank=True, null=True
@@ -161,13 +167,13 @@ class Lead(BaseModel):
     @property
     def get_team_and_assigned_users(self):
         team_user_ids = list(self.teams.values_list("users__id", flat=True))
-        assigned_user_ids = list(self.assigned_to.values_list("id", flat=True))
+        assigned_user_ids = [self.assigned_to.id] if self.assigned_to else []
         user_ids = team_user_ids + assigned_user_ids
         return Profile.objects.filter(id__in=user_ids)
 
     @property
     def get_assigned_users_not_in_teams(self):
         team_user_ids = list(self.teams.values_list("users__id", flat=True))
-        assigned_user_ids = list(self.assigned_to.values_list("id", flat=True))
+        assigned_user_ids = [self.assigned_to.id] if self.assigned_to else []
         user_ids = set(assigned_user_ids) - set(team_user_ids)
         return Profile.objects.filter(id__in=list(user_ids))

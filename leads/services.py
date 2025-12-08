@@ -190,8 +190,8 @@ class LeadConversionService:
             status='open'
         )
 
-        # Copy assigned users and teams
-        account.assigned_to.set(self.lead.assigned_to.all())
+        if self.lead.assigned_to:
+            account.assigned_to.add(self.lead.assigned_to)
         account.teams.set(self.lead.teams.all())
         account.tags.set(self.lead.tags.all())
 
@@ -200,7 +200,7 @@ class LeadConversionService:
     def _handle_contact(self, options):
         """Create new or link to existing contact"""
         action = options.get('action', 'create')
-        
+
         if action == 'link':
             existing_id = options.get('existing_id')
             try:
@@ -208,7 +208,7 @@ class LeadConversionService:
                 return contact
             except Contact.DoesNotExist:
                 raise LeadConversionError(f"Contact with id {existing_id} not found.")
-        
+
         # Create address for contact if needed
         address = None
         if self.lead.address_line or self.lead.city or self.lead.state:
@@ -240,8 +240,8 @@ class LeadConversionService:
             country=self.lead.country
         )
 
-        # Copy assigned users and teams
-        contact.assigned_to.set(self.lead.assigned_to.all())
+        if self.lead.assigned_to:
+            contact.assigned_to.add(self.lead.assigned_to)
         contact.teams.set(self.lead.teams.all())
 
         return contact
@@ -270,8 +270,8 @@ class LeadConversionService:
         # Add contact to opportunity
         opportunity.contacts.add(contact)
 
-        # Copy assigned users, teams, and tags
-        opportunity.assigned_to.set(self.lead.assigned_to.all())
+        if self.lead.assigned_to:
+            opportunity.assigned_to.add(self.lead.assigned_to)
         opportunity.teams.set(self.lead.teams.all())
         opportunity.tags.set(self.lead.tags.all())
 

@@ -33,7 +33,7 @@ class CompanySerializer(serializers.ModelSerializer):
 
 class LeadSerializer(serializers.ModelSerializer):
     contacts = ContactSerializer(read_only=True, many=True)
-    assigned_to = ProfileSerializer(read_only=True, many=True)
+    assigned_to = ProfileSerializer(read_only=True)
     created_by = UserSerializer()
     country = serializers.SerializerMethodField()
     tags = TagsSerializer(read_only=True, many=True)
@@ -41,45 +41,8 @@ class LeadSerializer(serializers.ModelSerializer):
     teams = TeamsSerializer(read_only=True, many=True)
     lead_comments = LeadCommentSerializer(read_only=True, many=True)
 
-    status_display = serializers.SerializerMethodField()
-    source_display = serializers.SerializerMethodField()
-    industry_display = serializers.SerializerMethodField()
-    salutation_display = serializers.SerializerMethodField()
-    department_display = serializers.SerializerMethodField()
-    preferred_language_display = serializers.SerializerMethodField()
-    rating_display = serializers.SerializerMethodField()
-    budget_range_display = serializers.SerializerMethodField()
-    decision_timeframe_display = serializers.SerializerMethodField()
-
     def get_country(self, obj):
         return obj.get_country_display()
-
-    def get_status_display(self, obj):
-        return obj.get_status_display() if obj.status else None
-
-    def get_source_display(self, obj):
-        return obj.get_source_display() if obj.source else None
-
-    def get_industry_display(self, obj):
-        return obj.get_industry_display() if obj.industry else None
-
-    def get_salutation_display(self, obj):
-        return obj.get_salutation_display() if obj.salutation else None
-
-    def get_department_display(self, obj):
-        return obj.get_department_display() if obj.department else None
-
-    def get_preferred_language_display(self, obj):
-        return obj.get_preferred_language_display() if obj.preferred_language else None
-
-    def get_rating_display(self, obj):
-        return obj.get_rating_display() if obj.rating else None
-
-    def get_budget_range_display(self, obj):
-        return obj.get_budget_range_display() if obj.budget_range else None
-
-    def get_decision_timeframe_display(self, obj):
-        return obj.get_decision_timeframe_display() if obj.decision_timeframe else None
 
     class Meta:
         model = Lead
@@ -91,9 +54,7 @@ class LeadSerializer(serializers.ModelSerializer):
             "phone",
             "email",
             "status",
-            "status_display",
             "source",
-            "source_display",
             "address_line",
             "contacts",
             "street",
@@ -116,23 +77,16 @@ class LeadSerializer(serializers.ModelSerializer):
             "created_from_site",
             "teams",
             "industry",
-            "industry_display",
             "company",
             "organization",
             "probability",
             "close_date",
             "salutation",
-            "salutation_display",
             "department",
-            "department_display",
             "preferred_language",
-            "preferred_language_display",
             "rating",
-            "rating_display",
             "budget_range",
-            "budget_range_display",
             "decision_timeframe",
-            "decision_timeframe_display",
             "do_not_call",
         )
 
