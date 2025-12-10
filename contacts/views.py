@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.activity_logger import log_activity
 from common.models import Attachments, Comment, Profile
 from common.serializer import (
     AttachmentsSerializer,
@@ -133,6 +134,16 @@ class ContactsListView(APIView, LimitOffsetPagination):
             attachment.contact = contact_obj
             attachment.attachment = request.FILES.get("contact_attachment")
             attachment.save()
+        
+        # Log contact creation
+        log_activity(
+            request,
+            action="CREATE",
+            entity_type="Contact",
+            entity_id=contact_obj.id,
+            entity_name=f"{contact_obj.first_name} {contact_obj.last_name}",
+        )
+        
         return Response(
             {"error": False, "message": "Contact created Successfuly"},
             status=status.HTTP_200_OK,
@@ -232,6 +243,16 @@ class ContactDetailView(APIView):
                 attachment.contact = contact_obj
                 attachment.attachment = request.FILES.get("contact_attachment")
                 attachment.save()
+            
+            # Log contact update
+            log_activity(
+                request,
+                action="UPDATE",
+                entity_type="Contact",
+                entity_id=contact_obj.id,
+                entity_name=f"{contact_obj.first_name} {contact_obj.last_name}",
+            )
+            
             return Response(
                 {"error": False, "message": "Contact Updated Successfully"},
                 status=status.HTTP_200_OK,
@@ -328,9 +349,23 @@ class ContactDetailView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Capture entity info before deletion
+        entity_id = self.object.id
+        entity_name = f"{self.object.first_name} {self.object.last_name}"
+        
         if self.object.address_id:
             self.object.address.delete()
         self.object.delete()
+        
+        # Log contact deletion
+        log_activity(
+            request,
+            action="DELETE",
+            entity_type="Contact",
+            entity_id=entity_id,
+            entity_name=entity_name,
+        )
+        
         return Response(
             {"error": False, "message": "Contact Deleted Successfully."},
             status=status.HTTP_200_OK,
