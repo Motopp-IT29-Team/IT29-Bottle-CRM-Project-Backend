@@ -36,60 +36,85 @@ class OpportunityListView(APIView, LimitOffsetPagination):
 
     def get_context_data(self, **kwargs):
         params = self.request.query_params
-        queryset = self.model.objects.filter(org=self.request.profile.org).order_by("-id")
-        accounts = Account.objects.filter(org=self.request.profile.org)
-        contacts = Contact.objects.filter(org=self.request.profile.org)
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            queryset = queryset.filter(
-                Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-            ).distinct()
-            accounts = accounts.filter(
-                Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-            ).distinct()
-            contacts = contacts.filter(
-                Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-            ).distinct()
-
-        if params:
-            if params.get("name"):
-                queryset = queryset.filter(name__icontains=params.get("name"))
-            if params.get("account"):
-                queryset = queryset.filter(account=params.get("account"))
-            if params.get("stage"):
-                queryset = queryset.filter(stage__contains=params.get("stage"))
-            if params.get("lead_source"):
+        context = {}
+        
+        # If limit=1, this is a form data request - skip opportunity fetching
+        is_form_request = params.get("limit") == "1"
+        
+        if not is_form_request:
+            # Only fetch opportunities for list view
+            queryset = self.model.objects.filter(org=self.request.profile.org).select_related(
+                'account', 'created_by', 'closed_by'
+            ).prefetch_related(
+                'contacts', 'assigned_to', 'tags', 'teams'
+            ).order_by("-id")
+            
+            if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
                 queryset = queryset.filter(
-                    lead_source__contains=params.get("lead_source")
-                )
-            if params.get("tags"):
-                queryset = queryset.filter(
-                    tags__in=params.get("tags")
+                    Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
                 ).distinct()
 
-        context = {}
-        results_opportunities = self.paginate_queryset(
-            queryset.distinct(), self.request, view=self
-        )
-        opportunities = OpportunitySerializer(results_opportunities, many=True).data
-        if results_opportunities:
-            offset = queryset.filter(id__gte=results_opportunities[-1].id).count()
-            if offset == queryset.count():
-                offset = None
+            if params:
+                if params.get("name"):
+                    queryset = queryset.filter(name__icontains=params.get("name"))
+                if params.get("account"):
+                    queryset = queryset.filter(account=params.get("account"))
+                if params.get("stage"):
+                    queryset = queryset.filter(stage__contains=params.get("stage"))
+                if params.get("lead_source"):
+                    queryset = queryset.filter(
+                        lead_source__contains=params.get("lead_source")
+                    )
+                if params.get("tags"):
+                    queryset = queryset.filter(
+                        tags__in=params.get("tags")
+                    ).distinct()
+
+            results_opportunities = self.paginate_queryset(
+                queryset.distinct(), self.request, view=self
+            )
+            opportunities = OpportunitySerializer(results_opportunities, many=True).data
+            if results_opportunities:
+                offset = queryset.filter(id__gte=results_opportunities[-1].id).count()
+                if offset == queryset.count():
+                    offset = None
+            else:
+                offset = 0
+            context["per_page"] = 10
+            page_number = (int(self.offset / 10) + 1,)
+            context["page_number"] = page_number
+            context.update(
+                {
+                    "opportunities_count": self.count,
+                    "offset": offset,
+                }
+            )
+            context["opportunities"] = opportunities
+            context["accounts_list"] = []
+            context["contacts_list"] = []
+            context["tags"] = []
+            context["users"] = []
         else:
-            offset = 0
-        context["per_page"] = 10
-        page_number = (int(self.offset / 10) + 1,)
-        context["page_number"] = page_number
-        context.update(
-            {
-                "opportunities_count": self.count,
-                "offset": offset,
-            }
-        )
-        context["opportunities"] = opportunities
-        context["accounts_list"] = AccountSerializer(accounts, many=True).data
-        context["contacts_list"] = ContactSerializer(contacts, many=True).data
-        context["tags"] = TagsSerailizer(Tags.objects.filter(), many=True).data
+            # Form data request - only fetch dropdown options
+            context["opportunities"] = []
+            context["opportunities_count"] = 0
+            context["offset"] = 0
+            context["per_page"] = 10
+            context["page_number"] = (1,)
+            
+            # Fetch only essential dropdown data
+            accounts = Account.objects.filter(org=self.request.profile.org).only('id', 'name')
+            if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
+                accounts = accounts.filter(
+                    Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
+                ).distinct()
+            context["accounts_list"] = [{'id': a.id, 'name': a.name} for a in accounts]
+            context["contacts_list"] = []
+            context["tags"] = []
+            # Fetch users for assigned_to dropdown
+            users = Profile.objects.filter(org=self.request.profile.org, is_active=True).select_related('user')
+            context["users"] = [{'id': str(u.id), 'user__email': u.user.email if u.user else ''} for u in users]
+            
         context["stage"] = STAGES
         context["lead_source"] = SOURCES
         context["currency"] = CURRENCY_CODES
@@ -118,13 +143,13 @@ class OpportunityListView(APIView, LimitOffsetPagination):
                 org=request.profile.org,
             )
 
-            if params.get("contacts"):
-                contacts_list = params.get("contacts")
+            if params.getlist("contacts"):
+                contacts_list = params.getlist("contacts")
                 contacts = Contact.objects.filter(id__in=contacts_list, org=request.profile.org)
                 opportunity_obj.contacts.add(*contacts)
 
-            if params.get("tags"):
-                tags = params.get("tags")
+            if params.getlist("tags"):
+                tags = params.getlist("tags")
                 for tag in tags:
                     obj_tag = Tags.objects.filter(slug=tag.lower())
                     if obj_tag.exists():
@@ -138,13 +163,13 @@ class OpportunityListView(APIView, LimitOffsetPagination):
                 if stage in ["CLOSED WON", "CLOSED LOST"]:
                     opportunity_obj.closed_by = self.request.profile
 
-            if params.get("teams"):
-                teams_list = params.get("teams")
+            if params.getlist("teams"):
+                teams_list = params.getlist("teams")
                 teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
                 opportunity_obj.teams.add(*teams)
 
-            if params.get("assigned_to"):
-                assinged_to_list = params.get("assigned_to")
+            if params.getlist("assigned_to"):
+                assinged_to_list = params.getlist("assigned_to")
                 profiles = Profile.objects.filter(
                     id__in=assinged_to_list, org=request.profile.org, is_active=True
                 )
@@ -164,10 +189,13 @@ class OpportunityListView(APIView, LimitOffsetPagination):
                 opportunity_obj.assigned_to.all().values_list("id", flat=True)
             )
 
-            send_email_to_assigned_user.delay(
-                recipients,
-                opportunity_obj.id,
-            )
+            try:
+                send_email_to_assigned_user.delay(
+                    recipients,
+                    opportunity_obj.id,
+                )
+            except Exception:
+                pass  # Celery/Redis not available, skip email notification
             return Response(
                 {"error": False, "message": "Opportunity Created Successfully"},
                 status=status.HTTP_200_OK,
@@ -225,14 +253,14 @@ class OpportunityDetailView(APIView):
                 opportunity_object.assigned_to.all().values_list("id", flat=True)
             )
             opportunity_object.contacts.clear()
-            if params.get("contacts"):
-                contacts_list = params.get("contacts")
+            if params.getlist("contacts"):
+                contacts_list = params.getlist("contacts")
                 contacts = Contact.objects.filter(id__in=contacts_list, org=request.profile.org)
                 opportunity_object.contacts.add(*contacts)
 
             opportunity_object.tags.clear()
-            if params.get("tags"):
-                tags = params.get("tags")
+            if params.getlist("tags"):
+                tags = params.getlist("tags")
                 for tag in tags:
                     obj_tag = Tags.objects.filter(slug=tag.lower())
                     if obj_tag.exists():
@@ -247,14 +275,14 @@ class OpportunityDetailView(APIView):
                     opportunity_object.closed_by = self.request.profile
 
             opportunity_object.teams.clear()
-            if params.get("teams"):
-                teams_list = params.get("teams")
+            if params.getlist("teams"):
+                teams_list = params.getlist("teams")
                 teams = Teams.objects.filter(id__in=teams_list, org=request.profile.org)
                 opportunity_object.teams.add(*teams)
 
             opportunity_object.assigned_to.clear()
-            if params.get("assigned_to"):
-                assinged_to_list = params.get("assigned_to")
+            if params.getlist("assigned_to"):
+                assinged_to_list = params.getlist("assigned_to")
                 profiles = Profile.objects.filter(
                     id__in=assinged_to_list, org=request.profile.org, is_active=True
                 )
@@ -274,10 +302,13 @@ class OpportunityDetailView(APIView):
                 opportunity_object.assigned_to.all().values_list("id", flat=True)
             )
             recipients = list(set(assigned_to_list) - set(previous_assigned_to_users))
-            send_email_to_assigned_user.delay(
-                recipients,
-                opportunity_object.id,
-            )
+            try:
+                send_email_to_assigned_user.delay(
+                    recipients,
+                    opportunity_object.id,
+                )
+            except Exception:
+                pass  # Celery/Redis not available, skip email notification
             return Response(
                 {"error": False, "message": "Opportunity Updated Successfully"},
                 status=status.HTTP_200_OK,

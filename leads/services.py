@@ -260,6 +260,8 @@ class LeadConversionService:
             amount=amount,
             lead_source=self.lead.source,
             probability=self.lead.probability or 0,
+            budget_range=self.lead.budget_range or '',
+            decision_timeframe=self.lead.decision_timeframe or '',
             closed_on=close_date,
             description=self.lead.description,
             org=self.org,

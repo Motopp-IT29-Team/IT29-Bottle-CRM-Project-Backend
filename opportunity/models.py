@@ -33,6 +33,24 @@ class Opportunity(BaseModel):
         _("Source of Lead"), max_length=255, choices=SOURCES, blank=True, null=True
     )
     probability = models.IntegerField(default=0, blank=True, null=True)
+    budget_range = models.CharField(
+        _("Budget Range"), max_length=50, blank=True, null=True,
+        choices=[
+            ('less_than_5000', 'Less than €5,000'),
+            ('5000_to_10000', '€5,000–€10,000'),
+            ('10000_to_25000', '€10,000–€25,000'),
+            ('over_25000', 'Over €25,000'),
+        ]
+    )
+    decision_timeframe = models.CharField(
+        _("Decision Timeframe"), max_length=50, blank=True, null=True,
+        choices=[
+            ('within_1_week', 'Within 1 week'),
+            ('within_1_month', 'Within 1 month'),
+            ('within_3_months', 'Within 3 months'),
+            ('more_than_3_months', 'More than 3 months'),
+        ]
+    )
     contacts = models.ManyToManyField(Contact)
     closed_by = models.ForeignKey(
         Profile,
