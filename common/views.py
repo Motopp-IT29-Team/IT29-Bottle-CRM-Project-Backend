@@ -27,6 +27,7 @@ from common.base_views import AssignedFilteredDetailView
 from common.base_views import AssignedFilteredListView
 from common.permissions import IsCreatorOrAdmin
 from common.permissions import IsOrgMember
+from common.permissions import CanViewActivityLogs
 from common.serializer import *
 from common.serializer import EmailTokenObtainPairSerializer
 from common.tasks import (
@@ -210,7 +211,7 @@ class ActivateUserView(APIView):
 
 
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from common.permissions import IsOrgMember, IsOrgAdmin, IsSameOrg
+from common.permissions import IsOrgAdmin, IsSameOrg  # IsOrgMember already imported at top
 from django.db import transaction
 from drf_spectacular.utils import extend_schema
 import string
@@ -222,11 +223,22 @@ class UsersListView(ListCreateAPIView):
     List and create users (profiles).
 
     Permissions:
-    - Must be org member and admin
+    - GET: Org members with can_view_others_activity_logs OR admins
+    - POST: Admins only
     """
     serializer_class = ProfileSerializer
-    permission_classes = [IsOrgMember, IsOrgAdmin]
+    permission_classes = [IsOrgMember]
     pagination_class = LimitOffsetPagination
+    
+    def get_permissions(self):
+        """Set permissions based on request method."""
+        if self.request.method == 'GET':
+            # Allow users with activity log permission to view users list
+            return [IsOrgMember(), CanViewActivityLogs()]
+        else:
+            # Only admins can create users
+            return [IsOrgMember(), IsOrgAdmin()]
+        return super().get_permissions()
 
     def get_queryset(self):
         """Filter profiles to current org."""
@@ -309,7 +321,6 @@ class UsersListView(ListCreateAPIView):
                     role=params.get("role"),
                     address=address_obj,
                     org=request.profile.org,
-                    created_by=request.profile,
                 )
 
             send_email_to_new_user(user.id)
@@ -433,17 +444,29 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
             errors["error"] = True
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-        user = user_serializer.save()
-        address_obj = address_serializer.save()
-        profile_obj = profile_serializer.save()
-        profile_obj.address = address_obj
-        profile_obj.updated_by = request.profile
-        profile_obj.save()
+        try:
+            user = user_serializer.save()
+            address_obj = address_serializer.save()
+            profile_obj = profile_serializer.save()
+            profile_obj.address = address_obj
+            profile_obj.updated_by = request.profile
+            
+            try:
+                profile_obj.save()
+            except Exception:
+                # If save fails due to FK constraint, try without updated_by
+                profile_obj.updated_by = None
+                profile_obj.save()
 
-        return Response(
-            {"error": False, "message": "User Updated Successfully"},
-            status=status.HTTP_200_OK,
-        )
+            return Response(
+                {"error": False, "message": "User Updated Successfully"},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response(
+                {"error": True, "errors": f"Failed to update user: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
     def delete(self, request, *args, **kwargs):
@@ -951,12 +974,25 @@ class UserStatusView(APIView):
             profile = Profile.objects.get(id=pk, org=request.profile.org)
             user = profile.user
 
+            # Check if trying to deactivate self
+            if profile.id == request.profile.id:
+                return Response(
+                    {"error": True, "errors": "You cannot change your own status"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             user.is_active = not user.is_active
             user.save()
 
             if not user.is_active:
-                profile.deactivated_by = request.profile
-                profile.deactivated_at = timezone.now()
+                # Ensure request.profile exists and is saved
+                if hasattr(request, 'profile') and request.profile and request.profile.id:
+                    profile.deactivated_by = request.profile
+                    profile.deactivated_at = timezone.now()
+                else:
+                    # Fallback: set to None if no valid profile
+                    profile.deactivated_by = None
+                    profile.deactivated_at = timezone.now()
             else:
                 profile.deactivated_by = None
                 profile.deactivated_at = None
@@ -1287,11 +1323,16 @@ class LogOrgSelectionView(APIView):
 class ActivityLogListView(APIView, LimitOffsetPagination):
     """
     List activity logs for the current organization.
-    Admin-only access. Supports filtering and pagination.
+    
+    Permission Model:
+    - Admins: Can view all activity logs
+    - Users: Can always view their own logs
+    - Users with can_view_others_activity_logs=True: Can view all org logs and filter by user
     
     Query Parameters:
     - offset: Pagination offset
     - limit: Number of records per page
+    - user_id: Filter by specific user ID (UUID) - only available to admins and users with can_view_others permission
     - user: Filter by user email (partial match)
     - action: Filter by action type (LOGIN, CREATE, UPDATE, DELETE)
     - entity_type: Filter by entity type (Lead, Contact, Account, etc.)
@@ -1302,22 +1343,36 @@ class ActivityLogListView(APIView, LimitOffsetPagination):
     
     @extend_schema(tags=["Activity Log"], parameters=swagger_params1.organization_params)
     def get(self, request, *args, **kwargs):
-        # Check admin permission
-        if request.profile.role != "ADMIN" and not request.user.is_superuser:
+        from common.models import ActivityLog
+        
+        # Check if profile exists (should be set by middleware)
+        if not hasattr(request, 'profile') or request.profile is None:
             return Response(
-                {"error": True, "message": "Only admins can view activity logs"},
+                {"error": True, "message": "Organization context required"},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        from common.models import ActivityLog
+        # Determine user permissions
+        is_admin = request.profile.role == "ADMIN" or request.user.is_superuser
+        can_view_others = request.profile.can_view_others_activity_logs
         
         # Base queryset filtered by org
         queryset = ActivityLog.objects.filter(org=request.profile.org)
         
+        # Apply permission-based filtering
+        if not is_admin and not can_view_others:
+            # Regular users can only see their own logs
+            queryset = queryset.filter(user=request.user)
+        
         # Apply filters
         params = request.query_params
         
-        if params.get("user"):
+        # User ID filter - only allow if admin or can view others
+        if params.get("user_id") and (is_admin or can_view_others):
+            queryset = queryset.filter(user__id=params.get("user_id"))
+        
+        # Email filter
+        if params.get("user") and (is_admin or can_view_others):
             queryset = queryset.filter(user_email__icontains=params.get("user"))
         
         if params.get("action"):
@@ -1354,4 +1409,6 @@ class ActivityLogListView(APIView, LimitOffsetPagination):
             "error": False,
             "logs": serializer.data,
             "total_count": total_count,
+            "can_view_others": is_admin or can_view_others,  # Frontend hint for showing user filter
+            "viewing_mode": "all" if (is_admin or can_view_others) else "own"
         })

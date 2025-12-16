@@ -157,6 +157,10 @@ class Profile(BaseModel):
     has_marketing_access = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_organization_admin = models.BooleanField(default=False)
+    can_view_others_activity_logs = models.BooleanField(
+        default=False,
+        help_text="Allow this user to view other users' activity logs. Users can always view their own logs."
+    )
     date_of_joining = models.DateField(null=True, blank=True)
 
     # Audit Fields
