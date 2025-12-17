@@ -162,6 +162,10 @@ class CreateUserSerializer(serializers.ModelSerializer):
 class CreateProfileSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(required=True, max_length=150)
     last_name = serializers.CharField(required=True, max_length=150)
+    can_view_others_activity_logs = serializers.BooleanField(required=False, default=False)
+    has_sales_access = serializers.BooleanField(required=False, default=False)
+    has_marketing_access = serializers.BooleanField(required=False, default=False)
+    is_organization_admin = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Profile
@@ -174,6 +178,7 @@ class CreateProfileSerializer(serializers.ModelSerializer):
             "has_sales_access",
             "has_marketing_access",
             "is_organization_admin",
+            "can_view_others_activity_logs",
         )
 
     def __init__(self, *args, **kwargs):
@@ -230,6 +235,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'user_details',
             'address',
             'date_of_joining',
+            'can_view_others_activity_logs',
             'created_by_email',
             'created_at',
             'updated_by_email',

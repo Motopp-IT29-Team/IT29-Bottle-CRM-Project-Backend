@@ -48,6 +48,28 @@ class IsCreatorOrAdmin(permissions.BasePermission):
         return False
 
 
+class CanViewActivityLogs(permissions.BasePermission):
+    """
+    Allow access if user is admin OR has can_view_others_activity_logs permission.
+    For users list view: allows read-only access for activity log filtering.
+    """
+    message = "You don't have permission to view other users' information."
+
+    def has_permission(self, request, view):
+        if not hasattr(request, 'profile') or not request.profile:
+            return False
+        
+        # Admins always have access
+        if request.user.is_superuser or request.profile.role == 'ADMIN':
+            return True
+        
+        # Users with can_view_others_activity_logs have read-only access
+        if request.method in permissions.SAFE_METHODS:
+            return request.profile.can_view_others_activity_logs
+        
+        return False
+
+
 class IsCreatorSharedOrAdmin(permissions.BasePermission):
     message = "You don't have permission to access this object."
 
