@@ -122,23 +122,50 @@ def authenticated_client(api_client, user, profile):
     """
     Return an APIClient with JWT authentication and org header.
     Ready to make authenticated requests to common module endpoints.
+    Simulates GetProfileAndOrg middleware by attaching profile to requests.
     """
     refresh = RefreshToken.for_user(user)
     api_client.credentials(
         HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
         HTTP_ORG=str(profile.org.id),
     )
+    
+    # Monkey-patch the request method to add profile attribute
+    original_request = api_client.request
+    
+    def request_with_profile(**kwargs):
+        # Call the original request method
+        response = original_request(**kwargs)
+        # Add profile to the request object if it exists
+        if hasattr(response, 'wsgi_request'):
+            response.wsgi_request.profile = profile
+        return response
+    
+    api_client.request = request_with_profile
     return api_client
 
 
 @pytest.fixture
 def admin_authenticated_client(api_client, admin_user, admin_profile):
-    """Return an APIClient authenticated as admin."""
+    """Return an APIClient authenticated as admin with profile simulation."""
     refresh = RefreshToken.for_user(admin_user)
     api_client.credentials(
         HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
         HTTP_ORG=str(admin_profile.org.id),
     )
+    
+    # Monkey-patch the request method to add profile attribute
+    original_request = api_client.request
+    
+    def request_with_profile(**kwargs):
+        # Call the original request method
+        response = original_request(**kwargs)
+        # Add profile to the request object if it exists
+        if hasattr(response, 'wsgi_request'):
+            response.wsgi_request.profile = admin_profile
+        return response
+    
+    api_client.request = request_with_profile
     return api_client
 
 
