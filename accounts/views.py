@@ -29,6 +29,7 @@ from accounts.serializer import (
 from teams.serializer import TeamsSerializer
 from accounts.tasks import send_email, send_email_to_assigned_user
 from cases.serializer import CaseSerializer
+from common.activity_logger import log_activity
 from common.models import Attachments, Comment, Profile
 from leads.models import Lead
 from leads.serializer import LeadSerializer
@@ -204,6 +205,16 @@ class AccountsListView(APIView, LimitOffsetPagination):
                 recipients,
                 account_object.id,
             )
+            
+            # Log account creation
+            log_activity(
+                request,
+                action="CREATE",
+                entity_type="Account",
+                entity_id=account_object.id,
+                entity_name=account_object.name,
+            )
+            
             return Response(
                 {"error": False, "message": "Account Created Successfully"},
                 status=status.HTTP_200_OK,
@@ -241,7 +252,7 @@ class AccountDetailView(APIView):
                 and not self.request.profile.is_admin
             ):
                 if not (
-                    (self.request.profile == account_object.created_by)
+                    (self.request.profile.user == account_object.created_by)
                     or (self.request.profile in account_object.assigned_to.all())
                 ):
                     return Response(
@@ -306,6 +317,16 @@ class AccountDetailView(APIView):
                 recipients,
                 account_object.id,
             )
+            
+            # Log account update
+            log_activity(
+                request,
+                action="UPDATE",
+                entity_type="Account",
+                entity_id=account_object.id,
+                entity_name=account_object.name,
+            )
+            
             return Response(
                 {"error": False, "message": "Account Updated Successfully"},
                 status=status.HTTP_200_OK,
@@ -324,7 +345,7 @@ class AccountDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
-            if self.request.profile != self.object.created_by:
+            if self.request.profile.user != self.object.created_by:
                 return Response(
                     {
                         "error": True,
@@ -332,6 +353,16 @@ class AccountDetailView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
+        
+        # Log account deletion before deleting
+        log_activity(
+            request,
+            action="DELETE",
+            entity_type="Account",
+            entity_id=self.object.id,
+            entity_name=self.object.name,
+        )
+        
         self.object.delete()
         return Response(
             {"error": False, "message": "Account Deleted Successfully."},
@@ -350,7 +381,7 @@ class AccountDetailView(APIView):
         context["account_obj"] = AccountSerializer(self.account).data
         if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
             if not (
-                (self.request.profile == self.account.created_by)
+                (self.request.profile.user == self.account.created_by)
                 or (self.request.profile in self.account.assigned_to.all())
             ):
                 return Response(
