@@ -299,9 +299,41 @@ class TestOpportunityActivityLogs:
             "amount": "10000",
             "probability": "50",
             "due_date": "2025-12-31",
+class TestAccountActivityLogs:
+    """Test activity logging for account operations."""
+    
+    @pytest.fixture(autouse=True)
+    def mock_celery_tasks(self, monkeypatch):
+        """Mock Celery tasks to prevent connection errors during tests."""
+        from unittest.mock import MagicMock
+        mock_delay = MagicMock()
+        monkeypatch.setattr('accounts.tasks.send_email_to_assigned_user.delay', mock_delay)
+    
+    def test_account_create_logs_activity(self, authenticated_client, org, profile, user):
+        """Test that creating an account logs CREATE activity."""
+        from accounts.models import Account
+        
+        url = "/api/accounts/"
+        data = {
+            "name": "Test Account",
+            "email": "test@example.com",
+            "phone": "+12125551234",
+            "status": "open",
+            "contact_name": "John Doe",
+            "billing_address_line": "123 Test St",
+            "billing_street": "Test Street",
+            "billing_city": "Test City",
+            "billing_state": "Test State",
+            "billing_postcode": "12345",
+            "billing_country": "US",
         }
         
         response = authenticated_client.post(url, data, format='multipart')
+        
+        # Debug output
+        if response.status_code != status.HTTP_200_OK:
+            print(f"Response status: {response.status_code}")
+            print(f"Response data: {response.data}")
         
         assert response.status_code == status.HTTP_200_OK
         
@@ -347,6 +379,39 @@ class TestOpportunityActivityLogs:
             "amount": "15000",
             "probability": "75",
             "due_date": "2025-12-31",
+            entity_type="Account",
+            org=org
+        )
+        assert logs.count() == 1
+        assert logs.first().entity_name == "Test Account"
+    
+    def test_account_update_logs_activity(self, authenticated_client, org, profile, user):
+        """Test that updating an account logs UPDATE activity."""
+        from accounts.models import Account
+        
+        # Create account
+        account = Account.objects.create(
+            name="Original Account",
+            org=org,
+            created_by=user,
+            status="open",
+            contact_name="John Doe"
+        )
+        # Add user to assigned_to so they have permission
+        account.assigned_to.add(profile)
+        
+        url = f"/api/accounts/{account.id}/"
+        data = {
+            "name": "Updated Account",
+            "email": "updated@example.com",
+            "status": "open",
+            "contact_name": "Jane Doe",
+            "billing_address_line": "123 Test St",
+            "billing_street": "Test Street",
+            "billing_city": "Test City",
+            "billing_state": "Test State",
+            "billing_postcode": "12345",
+            "billing_country": "US",
         }
         
         response = authenticated_client.put(url, data, format='multipart')
@@ -400,6 +465,32 @@ class TestOpportunityActivityLogs:
         if response.status_code != status.HTTP_200_OK:
             print(f"Response: {response.status_code}, Data: {response.data}")
         
+            entity_type="Account",
+            entity_id=account.id,
+            org=org
+        )
+        assert logs.count() == 1
+        assert logs.first().entity_name == "Updated Account"
+    
+    def test_account_delete_logs_activity(self, authenticated_client, org, profile, user):
+        """Test that deleting an account logs DELETE activity."""
+        from accounts.models import Account
+        
+        # Create account - created_by must be the user to have delete permission
+        account = Account.objects.create(
+            name="Account to Delete",
+            org=org,
+            created_by=user,
+            status="open"
+        )
+        
+        account_id = account.id
+        account_name = account.name
+        
+        url = f"/api/accounts/{account_id}/"
+        
+        response = authenticated_client.delete(url)
+        
         assert response.status_code == status.HTTP_200_OK
         
         # Check that activity log was created
@@ -412,3 +503,9 @@ class TestOpportunityActivityLogs:
         )
         assert logs.count() == 1
         assert logs.first().entity_name == opportunity_name
+            entity_type="Account",
+            entity_id=account_id,
+            org=org
+        )
+        assert logs.count() == 1
+        assert logs.first().entity_name == account_name
