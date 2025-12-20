@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from accounts.models import Account, Tags
 from accounts.serializer import AccountSerializer, TagsSerailizer
+from common.activity_logger import log_activity
 from common.models import Attachments, Comment, Profile
 
 #from common.external_auth import CustomDualAuthentication
@@ -196,6 +197,16 @@ class OpportunityListView(APIView, LimitOffsetPagination):
                 )
             except Exception:
                 pass  # Celery/Redis not available, skip email notification
+            
+            # Log opportunity creation
+            log_activity(
+                request,
+                action="CREATE",
+                entity_type="Opportunity",
+                entity_id=opportunity_obj.id,
+                entity_name=opportunity_obj.name,
+            )
+            
             return Response(
                 {"error": False, "message": "Opportunity Created Successfully"},
                 status=status.HTTP_200_OK,
@@ -229,7 +240,7 @@ class OpportunityDetailView(APIView):
             )
         if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
             if not (
-                (self.request.profile == opportunity_object.created_by)
+                (self.request.profile.user == opportunity_object.created_by)
                 or (self.request.profile in opportunity_object.assigned_to.all())
             ):
                 return Response(
@@ -309,6 +320,16 @@ class OpportunityDetailView(APIView):
                 )
             except Exception:
                 pass  # Celery/Redis not available, skip email notification
+            
+            # Log opportunity update
+            log_activity(
+                request,
+                action="UPDATE",
+                entity_type="Opportunity",
+                entity_id=opportunity_object.id,
+                entity_name=opportunity_object.name,
+            )
+            
             return Response(
                 {"error": False, "message": "Opportunity Updated Successfully"},
                 status=status.HTTP_200_OK,
@@ -329,7 +350,7 @@ class OpportunityDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if self.request.profile != self.object.created_by:
+            if self.request.profile.user != self.object.created_by:
                 return Response(
                     {
                         "error": True,
@@ -337,6 +358,16 @@ class OpportunityDetailView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
+        
+        # Log opportunity deletion before deleting
+        log_activity(
+            request,
+            action="DELETE",
+            entity_type="Opportunity",
+            entity_id=self.object.id,
+            entity_name=self.object.name,
+        )
+        
         self.object.delete()
         return Response(
             {"error": False, "message": "Opportunity Deleted Successfully."},
@@ -357,7 +388,7 @@ class OpportunityDetailView(APIView):
             )
         if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
             if not (
-                (self.request.profile == self.opportunity.created_by)
+                (self.request.profile.user == self.opportunity.created_by)
                 or (self.request.profile in self.opportunity.assigned_to.all())
             ):
                 return Response(
@@ -386,7 +417,7 @@ class OpportunityDetailView(APIView):
         elif self.request.profile != self.opportunity.created_by:
             if self.opportunity.created_by:
                 users_mention = [
-                    {"username": self.opportunity.created_by.user.email}
+                    {"username": self.opportunity.created_by.email}
                 ]
             else:
                 users_mention = []
@@ -417,6 +448,7 @@ class OpportunityDetailView(APIView):
                 "users_mention": users_mention,
             }
         )
+        
         return Response(context)
 
     @extend_schema(
