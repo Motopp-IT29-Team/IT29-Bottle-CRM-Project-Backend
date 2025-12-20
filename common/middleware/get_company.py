@@ -19,6 +19,11 @@ EXEMPT_URLS = [
     '/admin/',
 ]
 
+# URLs that need auth but can work without org/profile
+AUTH_OPTIONAL_ORG_URLS = [
+    '/api/auth/logout/',
+]
+
 
 def get_actual_value(request):
     if request.user is None:
@@ -40,6 +45,13 @@ class GetProfileAndOrg(object):
             if request.path.startswith(exempt_url):
                 request.profile = None
                 return
+        
+        # Check if this is an auth-optional-org URL
+        is_auth_optional_org = False
+        for optional_url in AUTH_OPTIONAL_ORG_URLS:
+            if request.path.startswith(optional_url):
+                is_auth_optional_org = True
+                break
 
         try:
             request.profile = None
@@ -70,10 +82,15 @@ class GetProfileAndOrg(object):
             if user_id is not None:
                 org_header = request.headers.get("org")
                 if org_header and org_header != "null" and org_header != "None":
-                    profile = Profile.objects.get(
-                        user_id=user_id, org=org_header, is_active=True
-                    )
-                    if profile:
-                        request.profile = profile
-        except (Profile.DoesNotExist, ValidationError, jwt.DecodeError):
+                    try:
+                        profile = Profile.objects.get(
+                            user_id=user_id, org=org_header, is_active=True
+                        )
+                        if profile:
+                            request.profile = profile
+                    except Profile.DoesNotExist:
+                        # For auth-optional-org URLs, don't raise error, just leave profile as None
+                        if not is_auth_optional_org:
+                            raise PermissionDenied()
+        except (ValidationError, jwt.DecodeError):
             raise PermissionDenied()

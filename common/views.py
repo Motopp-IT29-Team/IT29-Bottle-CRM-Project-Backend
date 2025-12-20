@@ -1272,18 +1272,52 @@ class LogoutView(APIView):
 
     @extend_schema(tags=["Auth"], parameters=swagger_params1.organization_params)
     def post(self, request, *args, **kwargs):
-        from common.models import ActivityLog
+        from common.models import ActivityLog, Profile
+        import traceback
         
-        # Log the logout
-        ActivityLog.objects.create(
-            user=request.user,
-            user_email=request.user.email,
-            user_role=request.profile.role,
-            org=request.profile.org,
-            action="LOGOUT",
-            entity_type="User",
-            entity_name="User Logout",
-        )
+        # Log the logout - handle missing profile gracefully
+        try:
+            # Ensure we have a profile
+            if not hasattr(request, 'profile') or request.profile is None:
+                # Try to get profile from org header
+                org_header = request.headers.get("org")
+                if org_header and org_header not in ["null", "None", ""]:
+                    try:
+                        request.profile = Profile.objects.get(
+                            user=request.user, 
+                            org=org_header, 
+                            is_active=True
+                        )
+                    except Profile.DoesNotExist:
+                        # Try to get any active profile for this user
+                        request.profile = Profile.objects.filter(
+                            user=request.user,
+                            is_active=True
+                        ).first()
+                else:
+                    # No org header, try to get any active profile
+                    request.profile = Profile.objects.filter(
+                        user=request.user,
+                        is_active=True
+                    ).first()
+            
+            # Create activity log if we have a profile
+            if hasattr(request, 'profile') and request.profile:
+                ActivityLog.objects.create(
+                    user=request.user,
+                    user_email=request.user.email,
+                    user_role=request.profile.role,
+                    org=request.profile.org,
+                    action="LOGOUT",
+                    entity_type="User",
+                    entity_name="User Logout",
+                )
+            else:
+                print(f"Logout: No profile found for user {request.user.email}")
+        except Exception as e:
+            # Don't let logging errors prevent logout
+            print(f"Logout logging error for {request.user.email}: {e}")
+            traceback.print_exc()
         
         return Response(
             {"error": False, "message": "Logged out successfully"},
@@ -1334,7 +1368,7 @@ class ActivityLogListView(APIView, LimitOffsetPagination):
     - limit: Number of records per page
     - user_id: Filter by specific user ID (UUID) - only available to admins and users with can_view_others permission
     - user: Filter by user email (partial match)
-    - action: Filter by action type (LOGIN, CREATE, UPDATE, DELETE)
+    - action: Filter by action type (LOGIN, LOGOUT, CREATE, UPDATE, DELETE, VIEW)
     - entity_type: Filter by entity type (Lead, Contact, Account, etc.)
     - date_from: Filter logs from this date (YYYY-MM-DD)
     - date_to: Filter logs until this date (YYYY-MM-DD)
