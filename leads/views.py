@@ -138,7 +138,7 @@ class LeadListView(APIView, LimitOffsetPagination):
         context["tags"] = TagsSerializer(Tags.objects.all(), many=True).data
 
         users = Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
-            "id", "user__email", "user__is_active"
+            "id", "user__email", "user__is_active", "user__first_name", "user__last_name"
         )
         context["users"] = users
         context["countries"] = COUNTRIES
