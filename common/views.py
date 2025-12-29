@@ -585,15 +585,45 @@ class ApiHomeView(APIView):
             opportunities = opportunities.filter(
                 Q(assigned_to=self.request.profile) | Q(created_by=self.request.profile.user)
             )
+
+        # Calculate pipeline value (sum of non-closed opportunity amounts)
+        from django.db.models import Sum
+        from decimal import Decimal
+        pipeline_value = opportunities.exclude(
+            stage__in=['CLOSED WON', 'CLOSED LOST']
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
         context = {}
         context["accounts_count"] = accounts.count()
         context["contacts_count"] = contacts.count()
         context["leads_count"] = leads.count()
         context["opportunities_count"] = opportunities.count()
+        context["pipeline_value"] = float(pipeline_value)
         context["accounts"] = AccountSerializer(accounts, many=True).data
         context["contacts"] = ContactSerializer(contacts, many=True).data
         context["leads"] = LeadSerializer(leads, many=True).data
         context["opportunities"] = OpportunitySerializer(opportunities, many=True).data
+
+        # Add recent activities
+        try:
+            from common.models import ActivityLog
+            activity_logs_qs = ActivityLog.objects.filter(org=request.profile.org).order_by('-created_at')[:10]
+            context["recent_activities"] = [
+                {
+                    'id': str(log.id),
+                    'action': log.action,
+                    'model_name': log.entity_type,
+                    'object_id': str(log.entity_id) if log.entity_id else None,
+                    'object_repr': log.entity_name,
+                    'user_email': log.user_email or (log.user.email if log.user else None),
+                    'created_at': log.created_at.isoformat(),
+                    'created_on_arrow': log.created_on_arrow if hasattr(log, 'created_on_arrow') else None,
+                }
+                for log in activity_logs_qs
+            ]
+        except Exception:
+            context["recent_activities"] = []
+
         return Response(context, status=status.HTTP_200_OK)
 
 
