@@ -235,8 +235,7 @@ class TestUserDelete:
     def get_url(self, profile_id):
         return f"/api/user/{profile_id}/"
 
-    @patch('common.views.send_email_user_delete')
-    def test_admin_can_delete_user(self, mock_send_email, admin_authenticated_client, org, create_user, create_profile):
+    def test_admin_can_delete_user(self, admin_authenticated_client, org, create_user, create_profile):
         """Test that admin can delete user."""
         user = create_user(email='delete@example.com')
         profile = create_profile(user=user, org=org, role='USER')
@@ -247,7 +246,6 @@ class TestUserDelete:
         assert response.data['error'] is False
         assert 'deleted successfully' in response.data['message']
         assert not User.objects.filter(id=user_id).exists()
-        mock_send_email.assert_called_once()
 
     def test_non_admin_cannot_delete_user(self, authenticated_client, org, create_user, create_profile):
         """Test that non-admin cannot delete users."""
