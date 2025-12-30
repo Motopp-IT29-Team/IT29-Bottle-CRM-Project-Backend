@@ -123,6 +123,7 @@ class ActivateUserView(APIView):
             )
 
     def post(self, request, uid, token, activation_key):
+        print(1)
         try:
             user_id = urlsafe_base64_decode(uid).decode()
             user = User.objects.get(pk=user_id)
@@ -309,6 +310,9 @@ class UsersListView(ListCreateAPIView):
                     password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
                 user_serializer.validated_data['password'] = password
+                user_serializer.validated_data['first_name'] = params.get("first_name")
+                user_serializer.validated_data['last_name'] = params.get("last_name")
+
                 user = user_serializer.save(is_active=False)
                 user.set_password(password)
                 user.save()
