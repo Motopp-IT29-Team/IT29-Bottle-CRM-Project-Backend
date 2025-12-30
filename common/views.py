@@ -505,8 +505,6 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
 
             user.delete()
 
-            send_email_user_delete(user_email, deleted_by=deleted_by)
-
             return Response(
                 {
                     "error": False,
