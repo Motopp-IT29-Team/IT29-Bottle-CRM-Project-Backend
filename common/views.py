@@ -123,6 +123,7 @@ class ActivateUserView(APIView):
             )
 
     def post(self, request, uid, token, activation_key):
+        print(1)
         try:
             user_id = urlsafe_base64_decode(uid).decode()
             user = User.objects.get(pk=user_id)
@@ -309,6 +310,9 @@ class UsersListView(ListCreateAPIView):
                     password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
                 user_serializer.validated_data['password'] = password
+                user_serializer.validated_data['first_name'] = params.get("first_name")
+                user_serializer.validated_data['last_name'] = params.get("last_name")
+
                 user = user_serializer.save(is_active=False)
                 user.set_password(password)
                 user.save()
@@ -470,7 +474,13 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
     def delete(self, request, *args, **kwargs):
-        profile = self.get_object()
+        try:
+            profile = self.get_object()
+        except Profile.DoesNotExist:
+            return Response(
+                {"error": False, "message": "User already deleted"},
+                status=status.HTTP_200_OK
+            )
 
         if request.profile.role != "ADMIN" and not request.profile.is_admin:
             return Response(
@@ -488,21 +498,31 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
         deleted_by = request.profile.user.email
         user = profile.user
 
-        Attachments.objects.filter(created_by=user).delete()
-        Document.objects.filter(created_by=user).delete()
-        APISettings.objects.filter(created_by=user).delete()
+        try:
+            Attachments.objects.filter(created_by=user).delete()
+            Document.objects.filter(created_by=user).delete()
+            APISettings.objects.filter(created_by=user).delete()
 
-        user.delete()
+            user.delete()
 
-        send_email_user_delete(user_email, deleted_by=deleted_by)
+            send_email_user_delete(user_email, deleted_by=deleted_by)
 
-        return Response(
-            {
-                "error": False,
-                "message": "User and all associated data deleted successfully"
-            },
-            status=status.HTTP_200_OK
-        )
+            return Response(
+                {
+                    "error": False,
+                    "message": "User and all associated data deleted successfully"
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {
+                    "error": True,
+                    "errors": f"Failed to delete user: {str(e)}"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class ResendInvitationView(APIView):
