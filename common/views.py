@@ -474,7 +474,13 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
 
     @extend_schema(tags=["users"], parameters=swagger_params1.organization_params)
     def delete(self, request, *args, **kwargs):
-        profile = self.get_object()
+        try:
+            profile = self.get_object()
+        except Profile.DoesNotExist:
+            return Response(
+                {"error": False, "message": "User already deleted"},
+                status=status.HTTP_200_OK
+            )
 
         if request.profile.role != "ADMIN" and not request.profile.is_admin:
             return Response(
@@ -492,21 +498,31 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
         deleted_by = request.profile.user.email
         user = profile.user
 
-        Attachments.objects.filter(created_by=user).delete()
-        Document.objects.filter(created_by=user).delete()
-        APISettings.objects.filter(created_by=user).delete()
+        try:
+            Attachments.objects.filter(created_by=user).delete()
+            Document.objects.filter(created_by=user).delete()
+            APISettings.objects.filter(created_by=user).delete()
 
-        user.delete()
+            user.delete()
 
-        send_email_user_delete(user_email, deleted_by=deleted_by)
+            send_email_user_delete(user_email, deleted_by=deleted_by)
 
-        return Response(
-            {
-                "error": False,
-                "message": "User and all associated data deleted successfully"
-            },
-            status=status.HTTP_200_OK
-        )
+            return Response(
+                {
+                    "error": False,
+                    "message": "User and all associated data deleted successfully"
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {
+                    "error": True,
+                    "errors": f"Failed to delete user: {str(e)}"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class ResendInvitationView(APIView):
