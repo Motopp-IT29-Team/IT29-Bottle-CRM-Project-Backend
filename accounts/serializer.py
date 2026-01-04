@@ -122,13 +122,13 @@ class AccountCreateSerializer(serializers.ModelSerializer):
         request_obj = kwargs.pop("request_obj", None)
         super().__init__(*args, **kwargs)
         self.fields["status"].required = False
-        if account_view:
-            self.fields["billing_address_line"].required = True
-            self.fields["billing_street"].required = True
-            self.fields["billing_city"].required = True
-            self.fields["billing_state"].required = True
-            self.fields["billing_postcode"].required = True
-            self.fields["billing_country"].required = True
+        # if account_view:
+        #     self.fields["billing_address_line"].required = True
+        #     self.fields["billing_street"].required = True
+        #     self.fields["billing_city"].required = True
+        #     self.fields["billing_state"].required = True
+        #     self.fields["billing_postcode"].required = True
+        #     self.fields["billing_country"].required = True
 
         if self.instance:
             self.fields["lead"].required = False

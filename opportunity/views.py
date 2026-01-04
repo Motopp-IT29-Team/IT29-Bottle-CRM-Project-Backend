@@ -38,7 +38,7 @@ class OpportunityListView(APIView, LimitOffsetPagination):
     def get_context_data(self, **kwargs):
         params = self.request.query_params
         context = {}
-        
+
         # If limit=1, this is a form data request - skip opportunity fetching
         is_form_request = params.get("limit") == "1"
         
@@ -114,8 +114,15 @@ class OpportunityListView(APIView, LimitOffsetPagination):
             context["tags"] = []
             # Fetch users for assigned_to dropdown
             users = Profile.objects.filter(org=self.request.profile.org, is_active=True).select_related('user')
-            context["users"] = [{'id': str(u.id), 'user__email': u.user.email if u.user else ''} for u in users]
-            
+            context["users"] = [
+                {
+                    'id': str(u.id),
+                    'user__email': u.user.email if u.user else '',
+                    'user__first_name': u.first_name or '',
+                    'user__last_name': u.last_name or '',
+                }
+                for u in users
+            ]
         context["stage"] = STAGES
         context["lead_source"] = SOURCES
         context["currency"] = CURRENCY_CODES

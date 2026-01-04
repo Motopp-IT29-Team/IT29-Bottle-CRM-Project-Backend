@@ -44,6 +44,12 @@ from opportunity.models import Opportunity
 from opportunity.serializer import OpportunitySerializer
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from common.permissions import IsOrgAdmin, IsSameOrg
+from django.db import transaction
+from drf_spectacular.utils import extend_schema
+import string
+import secrets
 
 
 class GetTeamsAndUsersView(APIView):
@@ -123,7 +129,6 @@ class ActivateUserView(APIView):
             )
 
     def post(self, request, uid, token, activation_key):
-        print(1)
         try:
             user_id = urlsafe_base64_decode(uid).decode()
             user = User.objects.get(pk=user_id)
@@ -186,6 +191,9 @@ class ActivateUserView(APIView):
 
             refresh = RefreshToken.for_user(user)
 
+            profile = Profile.objects.filter(user=user).first()
+            org_id = str(profile.org.id) if profile and profile.org else None
+
             return Response(
                 {
                     "message": "Account activated successfully",
@@ -193,8 +201,9 @@ class ActivateUserView(APIView):
                     "refresh": str(refresh),
                     "user": {
                         "email": user.email,
-                        "id": str(user.id)
-                    }
+                        "id": str(user.id),
+                    },
+                    "org_id": org_id,
                 },
                 status=status.HTTP_200_OK
             )
@@ -209,14 +218,6 @@ class ActivateUserView(APIView):
                 {"error": "Activation failed"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from common.permissions import IsOrgAdmin, IsSameOrg  # IsOrgMember already imported at top
-from django.db import transaction
-from drf_spectacular.utils import extend_schema
-import string
-import secrets
 
 
 class UsersListView(ListCreateAPIView):
