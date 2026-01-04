@@ -201,10 +201,10 @@ class AccountsListView(APIView, LimitOffsetPagination):
             recipients = list(
                 account_object.assigned_to.all().values_list("id", flat=True)
             )
-            send_email_to_assigned_user.delay(
-                recipients,
-                account_object.id,
-            )
+            # send_email_to_assigned_user.delay(
+            #     recipients,
+            #     account_object.id,
+            # )
             
             # Log account creation
             log_activity(
@@ -313,10 +313,10 @@ class AccountDetailView(APIView):
                 account_object.assigned_to.all().values_list("id", flat=True)
             )
             recipients = list(set(assigned_to_list) - set(previous_assigned_to_users))
-            send_email_to_assigned_user.delay(
-                recipients,
-                account_object.id,
-            )
+            # send_email_to_assigned_user.delay(
+            #     recipients,
+            #     account_object.id,
+            # )
             
             # Log account update
             log_activity(
@@ -652,11 +652,11 @@ class AccountCreateMailView(APIView):
                         email_obj.delete()
                         data["recipients"] = "Please enter valid recipient"
                         return Response({"error": True, "errors": data})
-            if data.get("scheduled_later") != "true":
-                send_email.delay(email_obj.id)
-            else:
-                email_obj.scheduled_later = True
-                email_obj.scheduled_date_time = scheduled_date_time
+            # if data.get("scheduled_later") != "true":
+            #     send_email.delay(email_obj.id)
+            # else:
+            #     email_obj.scheduled_later = True
+            #     email_obj.scheduled_date_time = scheduled_date_time
             return Response(
                 {"error": False, "message": "Email sent successfully"},
                 status=status.HTTP_200_OK,
