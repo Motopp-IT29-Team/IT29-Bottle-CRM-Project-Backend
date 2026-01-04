@@ -57,7 +57,7 @@ class OrgProfileCreateSerializer(serializers.ModelSerializer):
         }
 
     def validate_name(self, name):
-        if bool(re.search(r"[~\!_.@#\$%\^&\*\ \(\)\+{}\":;'/\[\]]", name)):
+        if bool(re.search(r"[~\!_.@#\$%\^&\*\(\)\+{}\":;'/\[\]]", name)):
             raise serializers.ValidationError(
                 "organization name should not contain any special characters"
             )

@@ -494,8 +494,8 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        user_email = profile.user.email
-        deleted_by = request.profile.user.email
+        # user_email = profile.user.email
+        # deleted_by = request.profile.user.email
         user = profile.user
 
         try:
@@ -504,6 +504,8 @@ class UserDetailView(RetrieveUpdateDestroyAPIView):
             APISettings.objects.filter(created_by=user).delete()
 
             user.delete()
+
+            # send_email_user_delete.delay(user_email, deleted_by=deleted_by)
 
             return Response(
                 {

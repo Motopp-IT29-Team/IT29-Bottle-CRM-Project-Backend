@@ -193,12 +193,12 @@ class LeadListView(APIView, LimitOffsetPagination):
                         lead_obj.save()
 
                         # Send email to assigned user
-                        recipients = [lead_obj.assigned_to.id]
-                        try:
-                            send_email_to_assigned_user(recipients, lead_obj.id)
-                        except Exception as e:
+                        # recipients = [lead_obj.assigned_to.id]
+                        # try:
+                        #     send_email_to_assigned_user(recipients, lead_obj.id)
+                        # except Exception as e:
                             # Celery not available, skip async email
-                            pass
+                            # pass
                     except Profile.DoesNotExist:
                         pass
 
@@ -246,11 +246,11 @@ class LeadListView(APIView, LimitOffsetPagination):
 
                 if data.get("assigned_to", None):
                     assigned_to_list = data.getlist("assigned_to")
-                    recipients = assigned_to_list
-                    send_email_to_assigned_user(
-                        recipients,
-                        lead_obj.id,
-                    )
+                    # recipients = assigned_to_list
+                    # send_email_to_assigned_user(
+                    #     recipients,
+                    #     lead_obj.id,
+                    # )
                 # Log lead creation and conversion
                 log_activity(
                     request,
@@ -502,8 +502,8 @@ class LeadDetailView(APIView):
             recipients = [
                 current_assigned_to] if current_assigned_to and current_assigned_to != previous_assigned_to else []
 
-            if recipients:
-                send_email_to_assigned_user(recipients, lead_obj.id)
+            # if recipients:
+            #     send_email_to_assigned_user(recipients, lead_obj.id)
 
             if request.FILES.get("lead_attachment"):
                 attachment = Attachments()
@@ -554,13 +554,13 @@ class LeadDetailView(APIView):
                         attachment.account_id = account_object.id
                 for tag in lead_obj.tags.all():
                     account_object.tags.add(tag)
-                if params.get("assigned_to"):
-                    assigned_to_list = params.getlist("assigned_to")
-                    recipients = assigned_to_list
-                    send_email_to_assigned_user(
-                        recipients,
-                        lead_obj.id,
-                    )
+                # if params.get("assigned_to"):
+                    # assigned_to_list = params.getlist("assigned_to")
+                    # recipients = assigned_to_list
+                    # send_email_to_assigned_user(
+                    #     recipients,
+                    #     lead_obj.id,
+                    # )
 
                 for comment in lead_obj.leads_comments.all():
                     comment.account = account_object
