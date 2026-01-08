@@ -82,7 +82,7 @@ def send_email_user_mentions(
             if comment_text.startswith("@"):
                 if comment_text.strip("@").strip(",") not in recipients:
                     if User.objects.filter(
-                        username=comment_text.strip("@").strip(","), is_active=True
+                            username=comment_text.strip("@").strip(","), is_active=True
                     ).exists():
                         email = (
                             User.objects.filter(
@@ -256,30 +256,48 @@ def resend_activation_link_to_user(user_email=""):
         print(f"❌ Resend email failed: {str(e)}")
 
 
-@app.task
 def send_email_to_reset_password(user_email):
-    """Send Mail To Users When their account is created"""
+    """Send password reset email via SendGrid"""
+
     user = User.objects.filter(email=user_email).first()
+
+    if not user:
+        print(f"❌ User {user_email} not found")
+        return
+
+    print(f"🔑 Sending password reset to {user_email}")
+
     context = {}
     context["user_email"] = user_email
     context["url"] = settings.DOMAIN_NAME
-    context["uid"] = (urlsafe_base64_encode(force_bytes(user.pk)),)
+    context["uid"] = urlsafe_base64_encode(force_bytes(user.pk))
     context["token"] = default_token_generator.make_token(user)
-    context["token"] = context["token"]
-    context["complete_url"] = context[
-        "url"
-    ] + "/auth/reset-password/{uidb64}/{token}/".format(
-        uidb64=context["uid"][0], token=context["token"]
+
+    # Generate reset URL
+    context["complete_url"] = "{}/auth/reset-password/{}/{}/".format(
+        context["url"],
+        context["uid"],
+        context["token"]
     )
-    subject = "Set a New Password"
-    recipients = []
-    recipients.append(user_email)
+
+    subject = "Reset Your Bottle CRM Password"
     html_content = render_to_string(
-        "registration/password_reset_email.html", context=context
+        "registration/password_reset_email.html",
+        context=context
     )
-    if recipients:
-        msg = EmailMessage(
-            subject, html_content, from_email=settings.DEFAULT_FROM_EMAIL, to=recipients
+
+    try:
+        message = Mail(
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to_emails=user_email,
+            subject=subject,
+            html_content=html_content
         )
-        msg.content_subtype = "html"
-        msg.send()
+
+        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+        response = sg.send(message)
+
+        print(f"✅ Password reset email sent to {user_email} (status: {response.status_code})")
+
+    except Exception as e:
+        print(f"❌ Password reset email failed: {str(e)}")
