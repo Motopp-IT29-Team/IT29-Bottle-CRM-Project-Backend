@@ -286,51 +286,86 @@ class ResetPasswordView(APIView):
         }
     )
     def post(self, request, uidb64, token):
-        try:
-            uid = urlsafe_base64_decode(uidb64).decode()
-            user = User.objects.get(pk=uid)
+        print(f"🔍 Reset password request started")
+        print(f"🔍 uidb64: {uidb64}")
+        print(f"🔍 token: {token}")
 
-            if not default_token_generator.check_token(user, token):
+        try:
+            # Decode UID
+            uid = urlsafe_base64_decode(uidb64).decode()
+            print(f"✅ Decoded uid: {uid}")
+
+            # Get user
+            user = User.objects.get(pk=uid)
+            print(f"✅ Found user: {user.email}")
+
+            # Validate token
+            token_valid = default_token_generator.check_token(user, token)
+            print(f"🔍 Token valid: {token_valid}")
+
+            if not token_valid:
+                print(f"❌ Token validation failed")
                 return Response(
                     {"error": "Invalid or expired reset link"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Get passwords
             password = request.data.get('password')
             password_confirm = request.data.get('password_confirm')
 
+            print(f"🔍 Password received: {'Yes' if password else 'No'}")
+            print(f"🔍 Password confirm received: {'Yes' if password_confirm else 'No'}")
+
+            # Validate password
             if not password:
+                print(f"❌ Password missing")
                 return Response(
                     {"error": "Password is required"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             if password != password_confirm:
+                print(f"❌ Passwords don't match")
                 return Response(
                     {"error": "Passwords do not match"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             if len(password) < 8:
+                print(f"❌ Password too short: {len(password)} chars")
                 return Response(
                     {"error": "Password must be at least 8 characters"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Set new password
+            print(f"🔄 Setting new password for {user.email}")
             user.set_password(password)
             user.save()
+            print(f"✅ Password reset successful for {user.email}")
 
             return Response(
                 {"message": "Password reset successfully. You can now login with your new password."},
                 status=status.HTTP_200_OK
             )
 
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        except User.DoesNotExist:
+            print(f"❌ User not found for uid: {uid if 'uid' in locals() else 'N/A'}")
+            return Response(
+                {"error": "Invalid reset link"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except (TypeError, ValueError, OverflowError) as e:
+            print(f"❌ Decoding error: {type(e).__name__}: {str(e)}")
             return Response(
                 {"error": "Invalid reset link"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
+            print(f"❌ Unexpected error: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return Response(
                 {"error": "Password reset failed"},
                 status=status.HTTP_400_BAD_REQUEST
