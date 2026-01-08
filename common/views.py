@@ -1,14 +1,19 @@
 import datetime
 import json
+import secrets
+import string
 import sys
 import traceback
 
 import requests
+from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
@@ -25,15 +30,15 @@ from cases.serializer import CaseSerializer
 from common import swagger_params1
 from common.base_views import AssignedFilteredDetailView
 from common.base_views import AssignedFilteredListView
-from common.permissions import IsCreatorOrAdmin
-from common.permissions import IsOrgMember
 from common.permissions import CanViewActivityLogs
+from common.permissions import IsCreatorOrAdmin
+from common.permissions import IsOrgAdmin, IsSameOrg
+from common.permissions import IsOrgMember
 from common.serializer import *
 from common.serializer import EmailTokenObtainPairSerializer
 from common.tasks import (
     resend_activation_link_to_user,
     send_email_to_new_user,
-    send_email_user_delete,
 )
 from common.token_generator import account_activation_token
 from common.utils import COUNTRIES
@@ -44,12 +49,6 @@ from opportunity.models import Opportunity
 from opportunity.serializer import OpportunitySerializer
 from teams.models import Teams
 from teams.serializer import TeamsSerializer
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from common.permissions import IsOrgAdmin, IsSameOrg
-from django.db import transaction
-from drf_spectacular.utils import extend_schema
-import string
-import secrets
 
 
 class GetTeamsAndUsersView(APIView):
@@ -219,6 +218,123 @@ class ActivateUserView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+
+class ForgotPasswordView(APIView):
+    """
+    Request password reset link.
+    Public endpoint - no authentication required.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(
+        tags=["Auth"],
+        description="Send password reset email to user",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "email": {"type": "string", "format": "email"}
+                },
+                "required": ["email"]
+            }
+        }
+    )
+    def post(self, request):
+        email = request.data.get('email', '').lower().strip()
+
+        if not email:
+            return Response(
+                {"error": "Email is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = User.objects.filter(email=email).first()
+
+        if user:
+            from common.tasks import send_email_to_reset_password
+            send_email_to_reset_password(email)
+
+        return Response(
+            {
+                "message": "If an account exists with this email, you will receive a password reset link shortly."
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ResetPasswordView(APIView):
+    """
+    Reset password using token from email.
+    Public endpoint - no authentication required.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(
+        tags=["Auth"],
+        description="Reset password with token from email",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "password": {"type": "string", "minLength": 8},
+                    "password_confirm": {"type": "string", "minLength": 8}
+                },
+                "required": ["password", "password_confirm"]
+            }
+        }
+    )
+    def post(self, request, uidb64, token):
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = User.objects.get(pk=uid)
+
+            if not default_token_generator.check_token(user, token):
+                return Response(
+                    {"error": "Invalid or expired reset link"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            password = request.data.get('password')
+            password_confirm = request.data.get('password_confirm')
+
+            if not password:
+                return Response(
+                    {"error": "Password is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if password != password_confirm:
+                return Response(
+                    {"error": "Passwords do not match"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if len(password) < 8:
+                return Response(
+                    {"error": "Password must be at least 8 characters"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            user.set_password(password)
+            user.save()
+
+            return Response(
+                {"message": "Password reset successfully. You can now login with your new password."},
+                status=status.HTTP_200_OK
+            )
+
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response(
+                {"error": "Invalid reset link"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": "Password reset failed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class UsersListView(ListCreateAPIView):
     """
