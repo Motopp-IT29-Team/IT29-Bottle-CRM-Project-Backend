@@ -906,6 +906,119 @@ class OrgProfileCreateView(APIView):
         )
 
 
+class OrgUpdateView(APIView):
+    """
+    Update organization name.
+    Only ADMIN can rename organizations.
+    """
+    permission_classes = [IsAuthenticated]  # Тільки authentication!
+
+    @extend_schema(
+        tags=["Organization"],
+        parameters=swagger_params1.organization_params,
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1, "maxLength": 255}
+                },
+                "required": ["name"]
+            }
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        """Update organization name."""
+        from common.models import Profile, Org
+
+        # Get org from header
+        org_id = request.headers.get('org') or request.META.get('HTTP_ORG')
+
+        print("=" * 60)
+        print("🔍 ORG UPDATE REQUEST")
+        print(f"User: {request.user.email}")
+        print(f"Org header: {org_id}")
+        print(f"Has profile: {hasattr(request, 'profile')}")
+        print("=" * 60)
+
+        if not org_id or org_id in ['null', 'None', '']:
+            return Response(
+                {"error": True, "errors": "Organization header is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get profile manually
+        try:
+            profile = Profile.objects.get(
+                user=request.user,
+                org_id=org_id,
+                is_active=True
+            )
+            request.profile = profile  # Set it manually
+            print(f"✅ Profile found: {profile.user.email}, Role: {profile.role}")
+        except Profile.DoesNotExist:
+            print(f"❌ Profile not found for user={request.user.email}, org={org_id}")
+            return Response(
+                {"error": True, "errors": "Profile not found for this organization"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if ADMIN
+        if profile.role != "ADMIN" and not request.user.is_superuser:
+            print(f"❌ User is not ADMIN: {profile.role}")
+            return Response(
+                {"error": True, "errors": "Only administrators can rename organizations"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get new name
+        name = request.data.get('name', '').strip()
+
+        if not name:
+            return Response(
+                {"error": True, "errors": {"name": ["Organization name is required"]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if name already exists (excluding current org)
+        if Org.objects.filter(name__iexact=name).exclude(id=profile.org.id).exists():
+            return Response(
+                {"error": True, "errors": {"name": ["An organization with this name already exists"]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update org name
+        org = profile.org
+        old_name = org.name
+        org.name = name
+        org.save()
+
+        print(f"✅ Organization renamed: '{old_name}' → '{name}'")
+
+        # Log activity
+        try:
+            from common.activity_logger import log_activity
+            log_activity(
+                request,
+                action="UPDATE",
+                entity_type="Organization",
+                entity_id=org.id,
+                entity_name=f"Renamed from '{old_name}' to '{name}'",
+            )
+        except Exception as e:
+            print(f"⚠️ Activity log error: {e}")
+
+        return Response(
+            {
+                "error": False,
+                "message": "Organization name updated successfully",
+                "org": {
+                    "id": str(org.id),
+                    "name": org.name
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
 class ProfileView(APIView):
     """
     Get current user's profile in the specified organization.

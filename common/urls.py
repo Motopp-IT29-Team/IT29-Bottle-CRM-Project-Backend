@@ -32,6 +32,7 @@ urlpatterns = [
 
     # Organizations
     path("org/", views.OrgProfileCreateView.as_view()),
+    path('org/update/', views.OrgUpdateView.as_view(), name='org-update'),
     path("profile/", views.ProfileView.as_view()),
 
     # Users
