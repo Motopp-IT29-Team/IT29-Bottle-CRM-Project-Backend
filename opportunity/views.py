@@ -148,6 +148,7 @@ class OpportunityListView(APIView, LimitOffsetPagination):
             opportunity_obj = serializer.save(
                 created_by=request.profile.user,
                 closed_on=params.get("due_date"),
+                decision_timeframe=params.get("decision_timeframe"),
                 org=request.profile.org,
             )
 
@@ -266,7 +267,11 @@ class OpportunityDetailView(APIView):
         )
 
         if serializer.is_valid():
-            opportunity_object = serializer.save(closed_on=params.get("due_date"))
+            opportunity_object = serializer.save(
+                closed_on=params.get("due_date"),
+                decision_timeframe=params.get("decision_timeframe")
+            )
+
             previous_assigned_to_users = list(
                 opportunity_object.assigned_to.all().values_list("id", flat=True)
             )

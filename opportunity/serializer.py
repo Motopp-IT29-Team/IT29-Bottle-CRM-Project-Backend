@@ -102,9 +102,6 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
             "is_active",
             "created_on_arrow",
             "org"
-            # "get_team_users",
-            # "get_team_and_assigned_users",
-            # "get_assigned_users_not_in_teams",
         )
 
 class OpportunityCreateSwaggerSerializer(serializers.ModelSerializer):
