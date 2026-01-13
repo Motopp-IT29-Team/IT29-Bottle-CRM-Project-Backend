@@ -118,7 +118,7 @@ class AccountsListView(APIView, LimitOffsetPagination):
         accounts_close = AccountSerializer(results_accounts_close, many=True).data
 
         contacts = Contact.objects.filter(org=self.request.profile.org).values(
-            "id", "first_name"
+            "id", "first_name", "last_name", "primary_email"
         )
         context["contacts"] = contacts
         context["closed_accounts"] = {
@@ -136,7 +136,7 @@ class AccountsListView(APIView, LimitOffsetPagination):
 
         context["tags"] = tags
         users = Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
-            "id", "user__email"
+            "id", "user__email", "user__first_name", "user__last_name"
         )
         context["users"] = users
         leads = Lead.objects.filter(org=self.request.profile.org).exclude(
