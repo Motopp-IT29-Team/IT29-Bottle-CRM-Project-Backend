@@ -220,13 +220,10 @@ class TestContactList:
         assert 'contact_obj_list' in response.data
         assert len(response.data['contact_obj_list']) >= 2
 
-    def test_regular_user_sees_only_assigned_contacts(self, authenticated_client, org, create_contact):
-        """Test that regular user only sees contacts assigned to them."""
-        # Contact assigned to user
+    def test_regular_user_sees_all_contacts(self, authenticated_client, org, create_contact):
+        """Test that regular user can see all contacts in organization."""
         contact1 = create_contact(org=org, first_name='Assigned', suffix='1')
         contact1.assigned_to.add(authenticated_client.profile)
-
-        # Contact not related to user
         contact2 = create_contact(org=org, first_name='Other', suffix='2')
 
         response = authenticated_client.get(self.url)
@@ -234,7 +231,7 @@ class TestContactList:
         assert response.status_code == status.HTTP_200_OK
         contact_ids = [c['id'] for c in response.data['contact_obj_list']]
         assert str(contact1.id) in contact_ids
-        assert str(contact2.id) not in contact_ids
+        assert str(contact2.id) in contact_ids
 
     def test_filter_contacts_by_name(self, admin_authenticated_client, org, create_contact):
         """Test filtering contacts by name."""
@@ -310,14 +307,15 @@ class TestContactDetail:
 
         assert response.status_code == status.HTTP_200_OK
 
-    def test_unrelated_user_cannot_view_contact(self, authenticated_client, org, create_contact):
-        """Test that unrelated user cannot view contact."""
+    def test_unrelated_user_can_view_contact(self, authenticated_client, org, create_contact):
+        """Test that any user can view contacts in their organization."""
         contact = create_contact(org=org)
 
         url = f'/api/contacts/{contact.id}/'
         response = authenticated_client.get(url)
 
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['contact_obj']['id'] == str(contact.id)
 
     def test_contact_detail_includes_address(self, admin_authenticated_client, org, create_contact, create_address):
         """Test that contact detail includes address."""
