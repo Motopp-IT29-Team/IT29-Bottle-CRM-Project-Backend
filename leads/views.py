@@ -59,11 +59,6 @@ class LeadListView(APIView, LimitOffsetPagination):
             .select_related("created_by", "assigned_to")
             .prefetch_related("tags")
         ).order_by("-id")
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            queryset = queryset.filter(
-                Q(assigned_to=self.request.profile)
-                | Q(created_by=self.request.profile.user)
-            )
 
         if params:
             if params.get("name"):
@@ -296,25 +291,9 @@ class LeadDetailView(APIView):
         params = self.request.query_params
         context = {}
 
-        # FIXED: assigned_to is now ForeignKey
-        user_assgn_list = [self.lead_obj.assigned_to.id] if self.lead_obj.assigned_to else []
-
-        if self.request.profile.user == self.lead_obj.created_by:
-            user_assgn_list.append(self.request.profile.id)
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if self.request.profile.id not in user_assgn_list:
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
         comments = Comment.objects.filter(lead=self.lead_obj).order_by("-id")
         attachments = Attachments.objects.filter(lead=self.lead_obj).order_by("-id")
 
-        # FIXED: assigned_to is now single object
         assigned_data = []
         if self.lead_obj.assigned_to:
             assigned_data.append({
@@ -322,46 +301,21 @@ class LeadDetailView(APIView):
                 "name": self.lead_obj.assigned_to.user.email
             })
 
-        if self.request.user.is_superuser or self.request.profile.role == "ADMIN":
-            users_mention = list(
-                Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
-                    "user__email"
-                )
-            )
-        elif self.request.profile.user != self.lead_obj.created_by:
-            users_mention = [{"user__email": self.lead_obj.created_by.email}]
-        else:
-            # FIXED: assigned_to is now single object
-            users_mention = [{"user__email": self.lead_obj.assigned_to.user.email}] if self.lead_obj.assigned_to else []
-
-        if self.request.profile.role == "ADMIN" or self.request.user.is_superuser:
-            users = Profile.objects.filter(
-                is_active=True, org=self.request.profile.org
-            ).order_by("user__email")
-        else:
-            users = Profile.objects.filter(role="ADMIN", org=self.request.profile.org).order_by(
+        users_mention = list(
+            Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
                 "user__email"
             )
-        user_assgn_list = [
-            assigned_to.id
-            for assigned_to in self.lead_obj.get_assigned_users_not_in_teams
-        ]
+        )
 
-        if self.request.profile.user == self.lead_obj.created_by:
-            user_assgn_list.append(self.request.profile.id)
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if self.request.profile.id not in user_assgn_list:
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        users = Profile.objects.filter(
+            is_active=True, org=self.request.profile.org
+        ).order_by("user__email")
+
         team_ids = [user.id for user in self.lead_obj.get_team_users]
         all_user_ids = [user.id for user in users]
         users_excluding_team_id = set(all_user_ids) - set(team_ids)
         users_excluding_team = Profile.objects.filter(id__in=users_excluding_team_id)
+
         context.update(
             {
                 "lead_obj": LeadSerializer(self.lead_obj).data,

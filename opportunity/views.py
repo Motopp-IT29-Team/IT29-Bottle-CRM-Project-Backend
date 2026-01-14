@@ -39,21 +39,14 @@ class OpportunityListView(APIView, LimitOffsetPagination):
         params = self.request.query_params
         context = {}
 
-        # If limit=1, this is a form data request - skip opportunity fetching
         is_form_request = params.get("limit") == "1"
-        
+
         if not is_form_request:
-            # Only fetch opportunities for list view
             queryset = self.model.objects.filter(org=self.request.profile.org).select_related(
                 'account', 'created_by', 'closed_by'
             ).prefetch_related(
                 'contacts', 'assigned_to', 'tags', 'teams'
             ).order_by("-id")
-            
-            if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-                queryset = queryset.filter(
-                    Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-                ).distinct()
 
             if params:
                 if params.get("name"):
@@ -96,23 +89,16 @@ class OpportunityListView(APIView, LimitOffsetPagination):
             context["tags"] = []
             context["users"] = []
         else:
-            # Form data request - only fetch dropdown options
             context["opportunities"] = []
             context["opportunities_count"] = 0
             context["offset"] = 0
             context["per_page"] = 10
             context["page_number"] = (1,)
-            
-            # Fetch only essential dropdown data
+
             accounts = Account.objects.filter(org=self.request.profile.org).only('id', 'name')
-            if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-                accounts = accounts.filter(
-                    Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-                ).distinct()
             context["accounts_list"] = [{'id': a.id, 'name': a.name} for a in accounts]
             context["contacts_list"] = []
             context["tags"] = []
-            # Fetch users for assigned_to dropdown
             users = Profile.objects.filter(org=self.request.profile.org, is_active=True).select_related('user')
             context["users"] = [
                 {
@@ -393,48 +379,24 @@ class OpportunityDetailView(APIView):
         self.opportunity = self.get_object(pk=pk)
         context = {}
         context["opportunity_obj"] = OpportunitySerializer(self.opportunity).data
+
         if self.opportunity.org != request.profile.org:
             return Response(
                 {"error": True, "errors": "User company doesnot match with header...."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if self.request.profile.role != "ADMIN" and not self.request.user.is_superuser:
-            if not (
-                (self.request.profile.user == self.opportunity.created_by)
-                or (self.request.profile in self.opportunity.assigned_to.all())
-            ):
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You don't have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
 
-        comment_permission = False
+        comment_permission = (
+                self.request.profile.user == self.opportunity.created_by
+                or self.request.user.is_superuser
+                or self.request.profile.role == "ADMIN"
+        )
 
-        if (
-            self.request.profile == self.opportunity.created_by
-            or self.request.user.is_superuser
-            or self.request.profile.role == "ADMIN"
-        ):
-            comment_permission = True
-
-        if self.request.user.is_superuser or self.request.profile.role == "ADMIN":
-            users_mention = list(
-                Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
-                    "user__email"
-                )
+        users_mention = list(
+            Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
+                "user__email"
             )
-        elif self.request.profile != self.opportunity.created_by:
-            if self.opportunity.created_by:
-                users_mention = [
-                    {"username": self.opportunity.created_by.email}
-                ]
-            else:
-                users_mention = []
-        else:
-            users_mention = []
+        )
 
         context.update(
             {
@@ -460,7 +422,7 @@ class OpportunityDetailView(APIView):
                 "users_mention": users_mention,
             }
         )
-        
+
         return Response(context)
 
     @extend_schema(

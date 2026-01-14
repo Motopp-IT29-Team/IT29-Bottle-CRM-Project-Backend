@@ -35,11 +35,6 @@ class ContactsListView(APIView, LimitOffsetPagination):
     def get_context_data(self, **kwargs):
         params = self.request.query_params
         queryset = self.model.objects.filter(org=self.request.profile.org).order_by("-id")
-        if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
-            queryset = queryset.filter(
-                Q(assigned_to__in=[self.request.profile])
-                | Q(created_by=self.request.profile.user)
-            ).distinct()
 
         if params:
             if params.get("name"):
@@ -265,28 +260,7 @@ class ContactDetailView(APIView):
         context = {}
         contact_obj = self.get_object(pk)
         context["contact_obj"] = ContactSerializer(contact_obj).data
-        user_assgn_list = [
-            assigned_to.id for assigned_to in contact_obj.assigned_to.all()
-        ]
-        user_assigned_accounts = set(
-            self.request.profile.account_assigned_users.values_list("id", flat=True)
-        )
-        contact_accounts = set(
-            contact_obj.account_contacts.values_list("id", flat=True)
-        )
-        if user_assigned_accounts.intersection(contact_accounts):
-            user_assgn_list.append(self.request.profile.id)
-        if self.request.profile == contact_obj.created_by:
-            user_assgn_list.append(self.request.profile.id)
-        if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
-            if self.request.profile.id not in user_assgn_list:
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+
         assigned_data = []
         for each in contact_obj.assigned_to.all():
             assigned_dict = {}
@@ -294,19 +268,11 @@ class ContactDetailView(APIView):
             assigned_dict["name"] = each.user.email
             assigned_data.append(assigned_dict)
 
-        if self.request.profile.is_admin or self.request.profile.role == "ADMIN":
-            users_mention = list(
-                Profile.objects.filter(is_active=True, org=request.profile.org).values(
-                    "user__email"
-                )
+        users_mention = list(
+            Profile.objects.filter(is_active=True, org=request.profile.org).values(
+                "user__email"
             )
-        elif self.request.profile != contact_obj.created_by:
-            users_mention = [{"username": contact_obj.created_by.user.email}]
-        else:
-            users_mention = list(contact_obj.assigned_to.all().values("user__email"))
-
-        if request.profile == contact_obj.created_by:
-            user_assgn_list.append(self.request.profile.id)
+        )
 
         context["address_obj"] = BillingAddressSerializer(contact_obj.address).data
         context["countries"] = COUNTRIES

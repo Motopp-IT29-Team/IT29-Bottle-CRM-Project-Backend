@@ -66,10 +66,6 @@ class AccountsListView(APIView, LimitOffsetPagination):
     def get_context_data(self, **kwargs):
         params = self.request.query_params
         queryset = self.model.objects.filter(org=self.request.profile.org).order_by("-id")
-        if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
-            queryset = queryset.filter(
-                Q(created_by=self.request.profile.user) | Q(assigned_to=self.request.profile)
-            ).distinct()
 
         if params:
             if params.get("name"):
@@ -144,7 +140,7 @@ class AccountsListView(APIView, LimitOffsetPagination):
         )
         context["users"] = users
         context["leads"] = LeadSerializer(leads, many=True).data
-        context["status"] = ["open","close"]
+        context["status"] = ["open", "close"]
         return context
 
     @extend_schema(tags=["Accounts"], parameters=swagger_params1.account_get_params)
@@ -372,50 +368,32 @@ class AccountDetailView(APIView):
     @extend_schema(tags=["Accounts"], parameters=swagger_params1.organization_params)
     def get(self, request, pk, format=None):
         self.account = self.get_object(pk=pk)
+
         if self.account.org != request.profile.org:
             return Response(
                 {"error": True, "errors": "User company doesnot match with header...."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
         context = {}
         context["account_obj"] = AccountSerializer(self.account).data
-        if self.request.profile.role != "ADMIN" and not self.request.profile.is_admin:
-            if not (
-                (self.request.profile.user == self.account.created_by)
-                or (self.request.profile in self.account.assigned_to.all())
-            ):
-                return Response(
-                    {
-                        "error": True,
-                        "errors": "You do not have Permission to perform this action",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
 
-        comment_permission = False
-        if (
-            self.request.profile == self.account.created_by
-            or self.request.profile.is_admin
-            or self.request.profile.role == "ADMIN"
-        ):
-            comment_permission = True
+        comment_permission = (
+                self.request.profile.user == self.account.created_by
+                or self.request.profile.is_admin
+                or self.request.profile.role == "ADMIN"
+        )
 
-        if self.request.profile.is_admin or self.request.profile.role == "ADMIN":
-            users_mention = list(
-                Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
-                    "user__email"
-                )
+        users_mention = list(
+            Profile.objects.filter(is_active=True, org=self.request.profile.org).values(
+                "user__email"
             )
-        elif self.request.profile != self.account.created_by:
-            if self.account.created_by:
-                users_mention = [{"username": self.account.created_by.user.email}]
-            else:
-                users_mention = []
-        else:
-            users_mention = []
+        )
+
         leads = Lead.objects.filter(org=self.request.profile.org).exclude(
             Q(status="converted") | Q(status="closed")
         )
+
         context.update(
             {
                 "attachments": AttachmentsSerializer(
@@ -439,7 +417,7 @@ class AccountDetailView(APIView):
                 "cases": CaseSerializer(
                     self.account.accounts_cases.all(), many=True
                 ).data,
-               "teams" : TeamsSerializer(
+                "teams": TeamsSerializer(
                     Teams.objects.filter(org=self.request.profile.org), many=True
                 ).data,
                 "stages": STAGES,
@@ -460,8 +438,8 @@ class AccountDetailView(APIView):
                     self.account.sent_email.all(), many=True
                 ).data,
                 "users_mention": users_mention,
-               "leads" : LeadSerializer(leads, many=True).data,
-               "status" : ["open","close"]
+                "leads": LeadSerializer(leads, many=True).data,
+                "status": ["open", "close"]
             }
         )
         return Response(context)
