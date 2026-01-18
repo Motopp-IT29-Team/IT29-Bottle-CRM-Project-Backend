@@ -89,7 +89,7 @@ class ReportGenerateRequestSerializer(serializers.Serializer):
     include_summary = serializers.BooleanField(default=True)
     include_charts = serializers.BooleanField(default=True)
     include_tables = serializers.BooleanField(default=True)
-    include_logo = serializers.BooleanField(default=True)
+    include_logo = serializers.BooleanField(default=False)
     
     def validate(self, data):
         # Either configuration_id or report_type must be provided

@@ -127,13 +127,17 @@ class ReportConfigurationDetailView(SalesAccessRequiredMixin, APIView):
             }, status=status.HTTP_404_NOT_FOUND)
 
 
-class ReportGenerateView(SalesAccessRequiredMixin, APIView):
+class ReportGenerateView(APIView):
     """API view to generate reports."""
     
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
         """Generate a PDF report based on provided configuration."""
+        print("=== Report Generation Request ===")
+        print(f"Request data: {request.data}")
+        print(f"User: {request.user}")
+        
         serializer = ReportGenerateRequestSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -187,6 +191,14 @@ class ReportGenerateView(SalesAccessRequiredMixin, APIView):
                 request.profile.org,
                 request.profile.user
             )
+            
+            # Check if there's any data to report
+            if not generator.has_data():
+                return Response({
+                    'error': True,
+                    'message': generator.get_no_data_message()
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             pdf_data = generator.generate()
             
             # Save generated report
@@ -233,18 +245,22 @@ class ReportGenerateView(SalesAccessRequiredMixin, APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class ReportDownloadView(SalesAccessRequiredMixin, APIView):
+class ReportDownloadView(APIView):
     """API view to download generated reports."""
     
     permission_classes = [IsAuthenticated]
     
     def get(self, request, pk):
         """Download a generated report."""
+        print(f"=== Download Request for report {pk} ===")
         try:
             report = GeneratedReport.objects.get(
                 pk=pk,
                 org=request.profile.org
             )
+            
+            print(f"Report found: {report.file_name}, status: {report.status}")
+            print(f"File path: {report.file_path}")
             
             if report.status != 'completed' or not report.file_path:
                 return Response({

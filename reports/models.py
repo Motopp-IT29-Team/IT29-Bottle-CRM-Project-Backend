@@ -8,12 +8,12 @@ class ReportConfiguration(models.Model):
     """Model to store report configurations."""
     
     REPORT_TYPE_CHOICES = [
-        ('sales', 'Sales Report'),
-        ('revenue', 'Revenue Report'),
-        ('activity', 'Activity Report'),
-        ('contact', 'Contact/Account Report'),
-        ('case', 'Case/Support Report'),
-        ('team', 'Team Performance Report'),
+        ('leads', 'Leads Report'),
+        ('accounts', 'Accounts Report'),
+        ('contacts', 'Contacts Report'),
+        ('opportunities', 'Opportunities Report'),
+        ('companies', 'Companies Report'),
+        ('activity', 'Activity Logs Report'),
     ]
     
     GROUPING_CHOICES = [
@@ -21,9 +21,10 @@ class ReportConfiguration(models.Model):
         ('weekly', 'Weekly'),
         ('monthly', 'Monthly'),
         ('user', 'By User'),
-        ('team', 'By Team'),
         ('status', 'By Status'),
         ('source', 'By Source'),
+        ('action', 'By Action'),
+        ('stage', 'By Stage'),
     ]
     
     name = models.CharField(max_length=255, help_text="Report configuration name")
@@ -55,7 +56,7 @@ class ReportConfiguration(models.Model):
     include_summary = models.BooleanField(default=True)
     include_charts = models.BooleanField(default=True)
     include_tables = models.BooleanField(default=True)
-    include_logo = models.BooleanField(default=True)
+    include_logo = models.BooleanField(default=False)
     
     # Metadata
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name='report_configs')
