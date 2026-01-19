@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "invoices",
     "events",
     "teams",
+    "reports",
     "dashboard",
     'django.contrib.postgres',
 ]

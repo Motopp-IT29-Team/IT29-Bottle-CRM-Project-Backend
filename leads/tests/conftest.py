@@ -119,7 +119,7 @@ def lead(db, org, profile, company):
         email="jane.smith@example.com",
         phone="+31687654321",
         account_name="Existing Account",
-        source="referral",
+        source="partner",
         status="new",
         org=org,
         company=company,

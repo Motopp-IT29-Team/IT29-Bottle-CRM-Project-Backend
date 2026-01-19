@@ -12,4 +12,5 @@ urlpatterns = [
     path("events/", include("events.urls", namespace="api_events")),
     path("cases/", include("cases.urls", namespace="api_cases")),
     path("dashboard/", include("dashboard.urls", namespace="api_dashboard")),
+    path("reports/", include("reports.urls", namespace="api_reports")),
 ]
