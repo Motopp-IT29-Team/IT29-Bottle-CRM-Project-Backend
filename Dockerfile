@@ -1,8 +1,11 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # Set default APP_NAME
 ARG APP_NAME=bottle-crm
 ENV APP_NAME=${APP_NAME}
+
+# Set non-interactive to prevent apt prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system packages
 RUN apt-get update -y
