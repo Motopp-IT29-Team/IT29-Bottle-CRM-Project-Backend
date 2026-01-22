@@ -14,7 +14,7 @@ RUN apt-get install -y \
   python3-venv \
   build-essential \
   libpq-dev \
-  libmariadbclient-dev \
+  libmariadb-dev \
   libjpeg62-dev \
   zlib1g-dev \
   libwebp-dev \
