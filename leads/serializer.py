@@ -133,23 +133,23 @@ class LeadCreateSerializer(serializers.ModelSerializer):
                 )
         return email
 
-    def validate_phone(self, phone):
-        """Check for duplicate phone"""
-        if self.instance:
-            if (
-                    Lead.objects.filter(phone=phone, org=self.org)
-                            .exclude(id=self.instance.id)
-                            .exists()
-            ):
-                raise serializers.ValidationError(
-                    "Lead already exists with this phone number"
-                )
-        else:
-            if Lead.objects.filter(phone=phone, org=self.org).exists():
-                raise serializers.ValidationError(
-                    "Lead already exists with this phone number"
-                )
-        return phone
+    # def validate_phone(self, phone):
+    #     """Check for duplicate phone"""
+    #     if self.instance:
+    #         if (
+    #                 Lead.objects.filter(phone=phone, org=self.org)
+    #                         .exclude(id=self.instance.id)
+    #                         .exists()
+    #         ):
+    #             raise serializers.ValidationError(
+    #                 "Lead already exists with this phone number"
+    #             )
+    #     else:
+    #         if Lead.objects.filter(phone=phone, org=self.org).exists():
+    #             raise serializers.ValidationError(
+    #                 "Lead already exists with this phone number"
+    #             )
+    #     return phone
 
     def validate_account_name(self, account_name):
         if self.instance:
@@ -161,18 +161,18 @@ class LeadCreateSerializer(serializers.ModelSerializer):
             )
         return account_name
 
-    def validate_title(self, title):
-        if self.instance:
-            if (
-                    Lead.objects.filter(title__iexact=title, org=self.org)
-                            .exclude(id=self.instance.id)
-                            .exists()
-            ):
-                raise serializers.ValidationError("Lead already exists with this title")
-        else:
-            if Lead.objects.filter(title__iexact=title, org=self.org).exists():
-                raise serializers.ValidationError("Lead already exists with this title")
-        return title
+    # def validate_title(self, title):
+    #     if self.instance:
+    #         if (
+    #                 Lead.objects.filter(title__iexact=title, org=self.org)
+    #                         .exclude(id=self.instance.id)
+    #                         .exists()
+    #         ):
+    #             raise serializers.ValidationError("Lead already exists with this title")
+    #     else:
+    #         if Lead.objects.filter(title__iexact=title, org=self.org).exists():
+    #             raise serializers.ValidationError("Lead already exists with this title")
+    #     return title
 
     class Meta:
         model = Lead
