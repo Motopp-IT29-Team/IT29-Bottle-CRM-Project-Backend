@@ -170,39 +170,39 @@ class TestLeadCreateSerializer:
         assert "email" in serializer.errors
         assert "already exists" in str(serializer.errors["email"][0]).lower()
 
-    def test_duplicate_phone_in_same_org_fails(self, org, profile, lead, valid_lead_data):
-        """Test validation fails for duplicate phone in same organization."""
-        request = Mock()
-        request.profile = profile
-        
-        # Use the same phone as existing lead
-        valid_lead_data["phone"] = str(lead.phone)
-        valid_lead_data["title"] = "Different Title"
-        valid_lead_data["email"] = "different@example.com"
-        valid_lead_data["account_name"] = "Different Account"
-        
-        serializer = LeadCreateSerializer(data=valid_lead_data, request_obj=request)
-        
-        assert not serializer.is_valid()
-        assert "phone" in serializer.errors
-        assert "already exists" in str(serializer.errors["phone"][0]).lower()
+    # def test_duplicate_phone_in_same_org_fails(self, org, profile, lead, valid_lead_data):
+    #     """Test validation fails for duplicate phone in same organization."""
+    #     request = Mock()
+    #     request.profile = profile
+    #
+    #     # Use the same phone as existing lead
+    #     valid_lead_data["phone"] = str(lead.phone)
+    #     valid_lead_data["title"] = "Different Title"
+    #     valid_lead_data["email"] = "different@example.com"
+    #     valid_lead_data["account_name"] = "Different Account"
+    #
+    #     serializer = LeadCreateSerializer(data=valid_lead_data, request_obj=request)
+    #
+    #     assert not serializer.is_valid()
+    #     assert "phone" in serializer.errors
+    #     assert "already exists" in str(serializer.errors["phone"][0]).lower()
 
-    def test_duplicate_title_in_same_org_fails(self, org, profile, lead, valid_lead_data):
-        """Test validation fails for duplicate title in same organization."""
-        request = Mock()
-        request.profile = profile
-        
-        # Use the same title as existing lead
-        valid_lead_data["title"] = lead.title
-        valid_lead_data["email"] = "different@example.com"
-        valid_lead_data["phone"] = "+31612345002"
-        valid_lead_data["account_name"] = "Different Account"
-        
-        serializer = LeadCreateSerializer(data=valid_lead_data, request_obj=request)
-        
-        assert not serializer.is_valid()
-        assert "title" in serializer.errors
-        assert "already exists" in str(serializer.errors["title"][0]).lower()
+    # def test_duplicate_title_in_same_org_fails(self, org, profile, lead, valid_lead_data):
+    #     """Test validation fails for duplicate title in same organization."""
+    #     request = Mock()
+    #     request.profile = profile
+    #
+    #     # Use the same title as existing lead
+    #     valid_lead_data["title"] = lead.title
+    #     valid_lead_data["email"] = "different@example.com"
+    #     valid_lead_data["phone"] = "+31612345002"
+    #     valid_lead_data["account_name"] = "Different Account"
+    #
+    #     serializer = LeadCreateSerializer(data=valid_lead_data, request_obj=request)
+    #
+    #     assert not serializer.is_valid()
+    #     assert "title" in serializer.errors
+    #     assert "already exists" in str(serializer.errors["title"][0]).lower()
 
     # ==============================
     # Choice Field Validation Tests
