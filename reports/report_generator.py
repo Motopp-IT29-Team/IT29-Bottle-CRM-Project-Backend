@@ -161,8 +161,9 @@ class ReportGeneratorService:
         
         # Add logo if enabled
         if self.config.get('include_logo', False):
-            # Try to find a logo file
+            # Try to find a logo file (prioritize the main app logo)
             possible_logo_paths = [
+                os.path.join(settings.BASE_DIR, 'static', 'assets', 'img', 'img_logo.png'),
                 os.path.join(settings.BASE_DIR, 'static', 'assets', 'img', 'logo-business.png'),
                 os.path.join(settings.BASE_DIR, 'static', 'assets', 'img', 'logo-saas.png'),
                 os.path.join(settings.BASE_DIR, 'static', 'images', 'logo.png'),
@@ -177,10 +178,27 @@ class ReportGeneratorService:
             
             if logo_path:
                 try:
-                    logo = Image(logo_path, width=2 * inch, height=0.6 * inch)
+                    # Load image and preserve aspect ratio for vertical alignment
+                    from PIL import Image as PILImage
+                    pil_img = PILImage.open(logo_path)
+                    img_width, img_height = pil_img.size
+                    aspect_ratio = img_height / img_width
+                    
+                    # Set max width and calculate height to maintain aspect ratio
+                    max_width = 1.5 * inch
+                    calculated_height = max_width * aspect_ratio
+                    
+                    # Cap the height if too tall
+                    max_height = 1.2 * inch
+                    if calculated_height > max_height:
+                        calculated_height = max_height
+                        max_width = calculated_height / aspect_ratio
+                    
+                    logo = Image(logo_path, width=max_width, height=calculated_height)
                     logo.hAlign = 'CENTER'
+                    elements.append(Spacer(1, 0.1 * inch))
                     elements.append(logo)
-                    elements.append(Spacer(1, 0.2 * inch))
+                    elements.append(Spacer(1, 0.3 * inch))
                 except Exception as e:
                     # If logo fails to load, just skip it
                     print(f"Failed to load logo: {e}")
